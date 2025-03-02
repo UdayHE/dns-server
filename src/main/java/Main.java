@@ -100,36 +100,18 @@ public class Main {
             resolverSocket.receive(resolverResponsePacket);
 
             byte[] responseData = resolverResponsePacket.getData();
-            ByteBuffer responseWrapper = ByteBuffer.wrap(responseData);
 
-            // Extract Transaction ID and Flags
-            short transactionId = responseWrapper.getShort();
-            short flags = responseWrapper.getShort();
+            // Ensure QR bit is set in the actual byte array
+            responseData[2] = (byte) (responseData[2] | 0x80); // Set bit 15 (QR bit)
 
-            System.out.println("Received response ID: " + transactionId);
-            System.out.println("Received response flags (before modification): " + Integer.toBinaryString(flags));
+            // Debug: Confirm changes before sending
+            System.out.println("Final response (hex): " + bytesToHex(responseData));
 
-            //Explicitly ensure QR bit is set (bit 15)
-            flags = (short) (flags | 0x8000); // 0x8000 = 1000000000000000 (sets bit 15)
-
-            System.out.println("Modified response flags (after setting QR): " + Integer.toBinaryString(flags));
-
-            // Construct a new response with modified QR bit
-            ByteBuffer modifiedResponse = ByteBuffer.allocate(responseData.length);
-            modifiedResponse.putShort(transactionId);
-            modifiedResponse.putShort(flags);
-            modifiedResponse.put(responseData, 4, responseData.length - 4); // Copy rest of the response
-
-            byte[] finalResponse = modifiedResponse.array();
-
-            // Debug: Print full response as hex before sending
-            System.out.println("Final response (hex): " + bytesToHex(finalResponse));
-
-            return finalResponse;
+            return responseData;
         }
     }
 
-    // Helper function to print bytes as hex
+    //  Helper function to print bytes as hex
     private static String bytesToHex(byte[] bytes) {
         StringBuilder sb = new StringBuilder();
         for (byte b : bytes) {
@@ -137,6 +119,7 @@ public class Main {
         }
         return sb.toString();
     }
+
 
 
 
