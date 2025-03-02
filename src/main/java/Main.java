@@ -185,10 +185,6 @@ public class Main {
 }
 
 
-
-
-
-
 class DnsPacketHeader {
     private int id; // Identifier
     private int qrIndicator; // Query/Response indicator (0 = query, 1 = response)
