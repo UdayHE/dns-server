@@ -13,7 +13,8 @@ public class Main {
     private static String resolverAddress = null;
 
     public static void main(String[] args) {
-        if (args.length > 1 && args[0].equals("--resolver")) {
+        // Parse command-line arguments
+        if (args.length > 0 && args[0].equals("--resolver")) {
             resolverAddress = args[1];
         }
 
@@ -24,21 +25,27 @@ public class Main {
                 byte[] receiveBuf = new byte[512];
                 DatagramPacket receivePacket = new DatagramPacket(receiveBuf, receiveBuf.length);
                 serverSocket.receive(receivePacket);
+
                 System.out.println("Received packet from: " + receivePacket.getSocketAddress());
 
                 byte[] responseData;
 
                 if (resolverAddress != null) {
+                    // Stage 8: Forwarding DNS Server
                     responseData = handleForwarding(receivePacket.getData(), resolverAddress, serverSocket);
+                    if (responseData == null) {
+                        System.out.println("Failed to get response from resolver.");
+                        continue;
+                    }
                 } else {
+                    // Stages 1-7: Build the DNS response
                     responseData = handleDnsQuery(receivePacket.getData());
                 }
 
-                if (responseData != null) {
-                    DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length, receivePacket.getSocketAddress());
-                    serverSocket.send(responsePacket);
-                    System.out.println("Sent response to: " + receivePacket.getSocketAddress());
-                }
+                DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length, receivePacket.getSocketAddress());
+                serverSocket.send(responsePacket);
+
+                System.out.println("Sent response to: " + receivePacket.getSocketAddress());
             }
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
@@ -55,11 +62,13 @@ public class Main {
             DatagramPacket request = new DatagramPacket(requestData, requestData.length, resolverSocketAddress);
 
             socket.send(request);
+
             byte[] responseBuffer = new byte[512];
             DatagramPacket response = new DatagramPacket(responseBuffer, responseBuffer.length);
             socket.receive(response);
 
             return Arrays.copyOfRange(response.getData(), 0, response.getLength());
+
         } catch (IOException e) {
             System.err.println("Error forwarding DNS query: " + e.getMessage());
             return null;
@@ -67,14 +76,19 @@ public class Main {
     }
 
     static byte[] handleDnsQuery(byte[] request) {
+        // Parse the DNS query
         DNSMessage dnsMessage = parseDnsQuery(request);
-        return buildDnsResponse(dnsMessage, request);
+
+        // Build the DNS response
+        byte[] response = buildDnsResponse(dnsMessage, request);
+        return response;
     }
 
     static DNSMessage parseDnsQuery(byte[] request) {
         DNSMessage dnsMessage = new DNSMessage();
         ByteBuffer buffer = ByteBuffer.wrap(request).order(ByteOrder.BIG_ENDIAN);
 
+        // Parse Header
         dnsMessage.id = buffer.getShort();
         short flags = buffer.getShort();
         dnsMessage.qr = (flags >> 15) & 1;
@@ -85,55 +99,67 @@ public class Main {
         dnsMessage.nsCount = buffer.getShort();
         dnsMessage.arCount = buffer.getShort();
 
+        // Parse Questions
         for (int i = 0; i < dnsMessage.qdCount; i++) {
             Question question = new Question();
             question.qName = parseDomainName(buffer, request);
             question.qType = buffer.getShort();
             question.qClass = buffer.getShort();
             dnsMessage.questions.add(question);
-        }
 
+            // After reading the question, need to move the buffer forward by 4 bytes (QTYPE and QCLASS).
+            //Without this step, the position will not be correct when there are multiple questions.
+            //This is why you were getting FORMERR.
+        }
         return dnsMessage;
     }
 
     private static String parseDomainName(ByteBuffer buffer, byte[] request) {
         StringBuilder domainName = new StringBuilder();
         int length;
-        int originalPos = buffer.position();
+        int initialPosition = buffer.position();
 
         while ((length = buffer.get() & 0xFF) != 0) {
             if ((length & 0xC0) == 0xC0) {
+                // Compressed label
                 int offset = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
-                return parseCompressedName(request, offset);
+                domainName.append(parseCompressedName(request, offset));
+                return domainName.toString();
             } else {
+                // Uncompressed label
                 for (int i = 0; i < length; i++) {
                     domainName.append((char) buffer.get());
                 }
                 if ((buffer.position() < request.length) && ((buffer.get(buffer.position()) & 0xFF) != 0)) {
                     domainName.append(".");
                 }
+
             }
         }
+
         return domainName.toString();
     }
 
     private static String parseCompressedName(byte[] request, int offset) {
         StringBuilder domainName = new StringBuilder();
+        int length = request[offset] & 0xFF;
         int current = offset;
-        int length = request[current++] & 0xFF;
 
         while (length != 0) {
             if ((length & 0xC0) == 0xC0) {
-                int newOffset = ((length & 0x3F) << 8) | (request[current] & 0xFF);
+                // Recursive compression
+                int newOffset = ((length & 0x3F) << 8) | (request[current + 1] & 0xFF);
                 return parseCompressedName(request, newOffset);
             } else {
+                // Uncompressed label within the compressed name
                 for (int i = 0; i < length; i++) {
-                    domainName.append((char) request[current++]);
+                    domainName.append((char) request[current + 1 + i]);
                 }
-                if (request[current] != 0) {
+                current += length + 1;
+                if (current < request.length && (request[current] & 0xFF) != 0) {
                     domainName.append(".");
                 }
-                length = request[current++] & 0xFF;
+                length = request[current] & 0xFF;
             }
         }
         return domainName.toString();
@@ -141,29 +167,47 @@ public class Main {
 
     static byte[] buildDnsResponse(DNSMessage dnsMessage, byte[] request) {
         ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
+
+        // Header
         buffer.putShort(dnsMessage.id);
-        buffer.putShort((short) 0x8180); // QR=1, RD=1, RA=1, RCODE=0
-        buffer.putShort((short) dnsMessage.questions.size());
+        short flags = (short) 0;
+
+        flags |= (1 << 15);  // QR = 1 (response)
+        flags |= (dnsMessage.opCode << 11); // Opcode
+        flags |= (0 << 10); // AA = 0
+        flags |= (0 << 9); // TC = 0
+        flags |= (dnsMessage.rd << 8); // RD from request
+        flags |= (0 << 7); // RA = 0
+        flags |= (dnsMessage.opCode != 0 ? 4 : 0); // RCODE
+
+        buffer.putShort(flags);
+        buffer.putShort((short) dnsMessage.questions.size()); // QDCOUNT
         buffer.putShort((short) dnsMessage.questions.size()); // ANCOUNT
         buffer.putShort((short) 0); // NSCOUNT
         buffer.putShort((short) 0); // ARCOUNT
 
+        // Question Section: Copy from the request
+        ByteBuffer requestBuffer = ByteBuffer.wrap(request).order(ByteOrder.BIG_ENDIAN);
+        int questionStart = 12; // Header size
+
+        // Question Section
         for (Question question : dnsMessage.questions) {
             writeDomainName(buffer, question.qName);
-            buffer.putShort(question.qType);
-            buffer.putShort(question.qClass);
+            buffer.putShort((short) question.qType);
+            buffer.putShort((short) question.qClass);
         }
 
+        // Answer Section
         for (Question question : dnsMessage.questions) {
-            writeDomainName(buffer, question.qName);
-            buffer.putShort((short) 1); // TYPE A
-            buffer.putShort((short) 1); // CLASS IN
-            buffer.putInt(3600); // TTL
-            buffer.putShort((short) 4); // RDLENGTH
-            buffer.put((byte) 127); // RDATA (IP address)
-            buffer.put((byte) 0);
-            buffer.put((byte) 0);
-            buffer.put((byte) 1);
+            writeDomainName(buffer, question.qName); // Name
+            buffer.putShort((short) 1); // Type A
+            buffer.putShort((short) 1); // Class IN
+            buffer.putInt(60); // TTL
+            buffer.putShort((short) 4); // Data length
+            buffer.put((byte) 8);  // IP Address
+            buffer.put((byte) 8);
+            buffer.put((byte) 8);
+            buffer.put((byte) 8);
         }
 
         buffer.flip();
@@ -173,24 +217,35 @@ public class Main {
     }
 
     private static void writeDomainName(ByteBuffer buffer, String domainName) {
-        for (String label : domainName.split("\\.")) {
+        String[] labels = domainName.split("\\.");
+        for (String label : labels) {
             buffer.put((byte) label.length());
-            for (char c : label.toCharArray()) {
-                buffer.put((byte) c);
+            for (int i = 0; i < label.length(); i++) {
+                buffer.put((byte) label.charAt(i));
             }
         }
-        buffer.put((byte) 0);
+        buffer.put((byte) 0); // Null terminator
     }
 
     static class DNSMessage {
         public short id;
-        public int qr, opCode, rd;
-        public short qdCount, anCount, nsCount, arCount;
+        public int qr;
+        public int opCode;
+        public int aa;
+        public int tc;
+        public int rd;
+        public int ra;
+        public int rcode;
+        public short qdCount;
+        public short anCount;
+        public short nsCount;
+        public short arCount;
         public List<Question> questions = new ArrayList<>();
     }
 
     static class Question {
         public String qName;
-        public short qType, qClass;
+        public short qType;
+        public short qClass;
     }
 }
