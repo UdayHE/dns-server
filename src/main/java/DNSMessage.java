@@ -17,7 +17,7 @@ public class DNSMessage {
     public DNSMessage(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data);
 
-        this.transactionId = buffer.getShort();
+        this.transactionId = buffer.getShort(); // Extract Transaction ID
         this.flags = buffer.getShort();
         this.questionCount = buffer.getShort();
         this.answerCount = buffer.getShort();
@@ -39,7 +39,6 @@ public class DNSMessage {
 
     private String parseDomainName(ByteBuffer buffer, byte[] data) {
         StringBuilder domainName = new StringBuilder();
-        int position = buffer.position();
 
         while (true) {
             int length = buffer.get() & 0xFF;
@@ -48,11 +47,7 @@ public class DNSMessage {
             // Handle name compression (first two bits set to 11)
             if ((length & 0xC0) == 0xC0) {
                 int pointer = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
-                int originalPosition = buffer.position();
-                buffer.position(pointer);
-                domainName.append(parseDomainName(buffer, data));
-                buffer.position(originalPosition);
-                break;
+                return parseDomainName(ByteBuffer.wrap(data, pointer, data.length - pointer), data);
             }
 
             if (domainName.length() > 0) domainName.append(".");
@@ -66,7 +61,7 @@ public class DNSMessage {
     public byte[] createResponse(byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
-        // Read resolver response header
+        // Extract response header
         short responseId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
         short qdCount = resolverBuffer.getShort();
@@ -74,14 +69,13 @@ public class DNSMessage {
         short nsCount = resolverBuffer.getShort();
         short arCount = resolverBuffer.getShort();
 
-        // Allocate buffer dynamically based on response size
+        // Allocate buffer dynamically
         int responseSize = resolverResponse.length;
-        if (responseSize > MAX_UDP_SIZE) {
-            responseSize = MAX_UDP_SIZE;
-        }
+        if (responseSize > MAX_UDP_SIZE) responseSize = MAX_UDP_SIZE; // Enforce UDP limit
+
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
-        // Ensure transaction ID is retained
+        // **Ensure transaction ID matches original request**
         responseBuffer.putShort(transactionId);
         responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
@@ -89,14 +83,14 @@ public class DNSMessage {
         responseBuffer.putShort(nsCount);
         responseBuffer.putShort(arCount);
 
-        // Copy question section from original request
+        // Copy original question section (to avoid mismatches)
         for (Question question : questions) {
             byte[] questionBytes = question.toBytes();
-            if (responseBuffer.remaining() < questionBytes.length) break; // Prevent overflow
+            if (responseBuffer.remaining() < questionBytes.length) break;
             responseBuffer.put(questionBytes);
         }
 
-        // Copy the entire answer section (truncate if needed)
+        // Copy resolver answer section (truncate if needed)
         int remainingBytes = resolverBuffer.remaining();
         if (remainingBytes > 0) {
             byte[] answerData = new byte[Math.min(remainingBytes, responseBuffer.remaining())];
@@ -104,7 +98,7 @@ public class DNSMessage {
             responseBuffer.put(answerData);
         }
 
-        // If response exceeds limit, set truncation flag
+        // **Set truncation flag if response exceeds limit**
         if (responseBuffer.position() > MAX_UDP_SIZE) {
             System.out.println("[Warning] Response exceeded 512 bytes, setting truncation flag.");
             responseBuffer.putShort(2, (short) (responseBuffer.getShort(2) | 0x0200)); // Set TC flag
