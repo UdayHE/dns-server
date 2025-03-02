@@ -109,7 +109,7 @@ public class Main {
             System.out.println("Received response ID: " + transactionId);
             System.out.println("Received response flags (before modification): " + Integer.toBinaryString(flags));
 
-            // Explicitly ensure QR bit is set (bit 15)
+            //Explicitly ensure QR bit is set (bit 15)
             flags = (short) (flags | 0x8000); // 0x8000 = 1000000000000000 (sets bit 15)
 
             System.out.println("Modified response flags (after setting QR): " + Integer.toBinaryString(flags));
@@ -120,9 +120,24 @@ public class Main {
             modifiedResponse.putShort(flags);
             modifiedResponse.put(responseData, 4, responseData.length - 4); // Copy rest of the response
 
-            return modifiedResponse.array();
+            byte[] finalResponse = modifiedResponse.array();
+
+            // Debug: Print full response as hex before sending
+            System.out.println("Final response (hex): " + bytesToHex(finalResponse));
+
+            return finalResponse;
         }
     }
+
+    // Helper function to print bytes as hex
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02X ", b));
+        }
+        return sb.toString();
+    }
+
 
 
     /**
