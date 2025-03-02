@@ -28,19 +28,19 @@ public class Main {
 
                 System.out.println("Received a DNS request.");
 
-                // 🔹 Parse received query using `DNSMessage`
+                //Parse received query using `DNSMessage`
                 DNSMessage requestMessage = new DNSMessage(clientPacket.getData());
 
-                // 🔹 Forward the query and get a response
+                //Forward the query and get a response
                 byte[] resolverResponse = forwardQuery(clientPacket.getData(), resolverIP, resolverPort);
 
-                // 🔹 Parse response to ensure correctness
+                //Parse response to ensure correctness
                 DNSMessage responseMessage = new DNSMessage(resolverResponse);
 
-                // 🔹 Generate the final response packet
+                //Generate the final response packet
                 byte[] finalResponse = DNSMessage.createResponse(responseMessage);
 
-                // ✅ Debugging
+                //Debugging
                 System.out.println("Final response being sent: " + Arrays.toString(finalResponse));
 
                 DatagramPacket responsePacket = new DatagramPacket(
@@ -74,14 +74,22 @@ public class Main {
 
             byte[] responseData = resolverResponsePacket.getData();
 
-            // ✅ Do not modify the IP address, just return the exact response from resolver
+            // Do NOT modify the answer section - return as is!
             System.out.println("Final response (hex): " + bytesToHex(responseData));
+
+            // Print the last 4 bytes where IPv4 address should be
+            System.out.println("IPv4 Address from resolver: " + (responseData[responseData.length - 4] & 0xFF) + "." +
+                    (responseData[responseData.length - 3] & 0xFF) + "." +
+                    (responseData[responseData.length - 2] & 0xFF) + "." +
+                    (responseData[responseData.length - 1] & 0xFF));
+
 
             return responseData;
         }
     }
 
-    // 🔹 Helper function to convert byte arrays to hex strings for debugging
+
+    // Helper function to convert byte arrays to hex strings for debugging
     private static String bytesToHex(byte[] bytes) {
         StringBuilder sb = new StringBuilder();
         for (byte b : bytes) {
