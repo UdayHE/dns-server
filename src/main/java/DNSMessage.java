@@ -89,6 +89,10 @@ public class DNSMessage {
         responseBuffer.putShort(anCount);
         responseBuffer.putShort(nsCount);
         responseBuffer.putShort(arCount);
+        // Ignore Authority & Additional Sections
+        responseBuffer.putShort(8, (short) 0); // Authority count
+        responseBuffer.putShort(10, (short) 0); // Additional count
+
 
 
         // Copy original question section (avoid mismatches)
@@ -104,16 +108,23 @@ public class DNSMessage {
             byte[] answerData = new byte[answerSectionSize];
             resolverBuffer.get(answerData, 0, answerSectionSize);
 
-            // Only copy non-zero bytes to avoid unnecessary padding
-            int lastNonZeroIndex = answerData.length - 1;
-            while (lastNonZeroIndex > 0 && answerData[lastNonZeroIndex] == 0) {
-                lastNonZeroIndex--;
+            // Extract record type to check for A records
+            ByteBuffer answerBuffer = ByteBuffer.wrap(answerData);
+            int nameOffset = answerBuffer.position();
+            short type = answerBuffer.getShort(nameOffset + 2);
+
+            // Ensure A-record has exactly 4-byte RDATA
+            if (type == 1) {  // Type 1 = A Record
+                short rdLength = answerBuffer.getShort(nameOffset + 10);
+                if (rdLength != 4) {
+                    System.err.println("[Error] Invalid RDATA length for A record: " + rdLength);
+                    return new byte[0]; // Return empty response to prevent invalid records
+                }
             }
 
-            byte[] trimmedAnswerData = new byte[lastNonZeroIndex + 1];
-            System.arraycopy(answerData, 0, trimmedAnswerData, 0, trimmedAnswerData.length);
-            responseBuffer.put(trimmedAnswerData);
+            responseBuffer.put(answerData);
         }
+
 
 
         // Ensure response doesn't exceed 512 bytes
@@ -147,6 +158,9 @@ public class DNSMessage {
 
         System.out.println("[Debug] Final Trimmed Response Size: " + response.length);
         System.out.println("[Debug] First 50 Bytes of Trimmed Response: " + java.util.Arrays.toString(java.util.Arrays.copyOf(response, Math.min(50, response.length))));
+        System.out.println("[Debug] Answer Section Bytes: " +
+                java.util.Arrays.toString(java.util.Arrays.copyOfRange(response, HEADER_SIZE, response.length)));
+
         return response;
     }
 }
