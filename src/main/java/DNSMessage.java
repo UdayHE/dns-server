@@ -58,36 +58,42 @@ public class DNSMessage {
     public static byte[] createResponse(DNSMessage request, byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
-        // Extract the Transaction ID and Flags from the resolver response
+        // Extract Transaction ID and Flags from the resolver response
         short transactionId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
 
-        //Extract QDCOUNT and ANCOUNT
+        // Extract QDCOUNT and ANCOUNT
         short qdCount = resolverBuffer.getShort();
         short anCount = resolverBuffer.getShort();
         resolverBuffer.getShort(); // NSCOUNT (skip)
         resolverBuffer.getShort(); // ARCOUNT (skip)
 
-        //Skip the question section (move the buffer forward)
+        // Skip the question section
         int questionSectionSize = request.questionSections.stream().mapToInt(q -> q.length + 4).sum();
         resolverBuffer.position(12 + questionSectionSize);
 
-        // Extract the IPv4 Address from the Answer Section
-        resolverBuffer.getShort(); // Type (A)
-        resolverBuffer.getShort(); // Class (IN)
-        resolverBuffer.getInt();   // TTL (skip)
-        resolverBuffer.getShort(); // Data Length (skip)
+        // Extract the Answer Section (Correct Offset Handling)
+        byte[] namePointer = new byte[request.questionSections.get(0).length]; // Name field in answer
+        resolverBuffer.get(namePointer);
+        short answerType = resolverBuffer.getShort();
+        short answerClass = resolverBuffer.getShort();
+        int ttl = resolverBuffer.getInt();
+        short dataLength = resolverBuffer.getShort();
 
         byte[] ipAddress = new byte[4];
-        resolverBuffer.get(ipAddress); //Extract the IPv4 address from the resolver response
+        if (answerType == 1 && dataLength == 4) { // Ensure it's an IPv4 response
+            resolverBuffer.get(ipAddress);
+        } else {
+            ipAddress = new byte[]{0, 0, 0, 0}; // Fallback if no valid IPv4 found
+        }
 
         // Debugging: Print the extracted IPv4 address
         System.out.println("Extracted IPv4 Address: " +
                 (ipAddress[0] & 0xFF) + "." + (ipAddress[1] & 0xFF) + "." +
                 (ipAddress[2] & 0xFF) + "." + (ipAddress[3] & 0xFF));
 
-        // Create the final response
-        int responseSize = 12 + questionSectionSize + 16; // Header + Question + Answer (fixed size for A record)
+        // Calculate response size correctly
+        int responseSize = 12 + questionSectionSize + (namePointer.length + 16);
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
         responseBuffer.putShort(transactionId); // Copy ID from resolver response
@@ -106,18 +112,15 @@ public class DNSMessage {
         }
 
         // Add the Answer Section
-        for (byte[] question : request.questionSections) {
-            responseBuffer.put(question); // Name (Uncompressed)
-            responseBuffer.putShort((short) 1); // Type (A)
-            responseBuffer.putShort((short) 1); // Class (IN)
-            responseBuffer.putInt(60); // TTL (60 seconds)
-            responseBuffer.putShort((short) 4); // Length (IPv4 address size)
-            responseBuffer.put(ipAddress); // Correct IPv4 address from resolver response
-        }
+        responseBuffer.put(namePointer); // Name (Pointer or Uncompressed)
+        responseBuffer.putShort(answerType); // Type (A)
+        responseBuffer.putShort(answerClass); // Class (IN)
+        responseBuffer.putInt(ttl); // TTL (Copied from resolver)
+        responseBuffer.putShort((short) 4); // Length (IPv4 address size)
+        responseBuffer.put(ipAddress); // Correct IPv4 address from resolver response
 
         return responseBuffer.array();
     }
-
 
 
     private static List<Byte> byteArrayToList(byte[] array) {
