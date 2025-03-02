@@ -83,16 +83,19 @@ public class Main {
 
                     resolverRequest = concatenateByteArrays(resolverRequest, questionBytes);
 
-
-                    // Move offset properly
+                    // Update offset correctly
                     offset += question.getByteSize();
                 }
 
-                System.out.println("Final Resolver Request Bytes: " + Arrays.toString(resolverRequest));
+
                 System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
                 System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
 
                 DatagramPacket resolverPacket = new DatagramPacket(resolverRequest, resolverRequest.length, resolverSocketAddress);
+
+                System.out.println("Final Resolver Request Bytes: " + Arrays.toString(resolverRequest));
+                System.out.println("Final Resolver Request HEX: " + bytesToHex(resolverRequest, resolverRequest.length));
+
                 resolverSocket.send(resolverPacket);
 
                 byte[] resolverBuffer = new byte[512];
@@ -328,6 +331,7 @@ class Question {
 
         return questions;
     }
+
 
 
     private static byte[] domainToBytes(String domain) {
