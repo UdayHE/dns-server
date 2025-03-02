@@ -68,6 +68,8 @@ public class Main {
                     System.out.println("Final Encoded Question: " + question.getName() + " -> " + Main.bytesToHex(question.toBytes(), question.toBytes().length));
                 }
 
+                int firstDomainOffset = -1;
+
                 for (int i = 0; i < recHeader.getQuestionCount(); i++) {
                     List<Question> questionList = Question.fromBytes(1, buffer, offset);
                     if (questionList.isEmpty()) {
@@ -78,14 +80,22 @@ public class Main {
                     Question question = questionList.get(0);
                     extractedQuestions.add(question);
 
-                    byte[] questionBytes = question.toBytes();
+                    byte[] questionBytes;
+                    if (firstDomainOffset == -1) {
+                        questionBytes = question.toBytes(); // First domain encoded fully
+                        firstDomainOffset = offset;
+                    } else {
+                        questionBytes = question.toBytesUsingCompression(firstDomainOffset);
+                    }
+
                     System.out.println("Appending Question: " + question.getName() + " -> " + Main.bytesToHex(questionBytes, questionBytes.length));
 
                     resolverRequest = concatenateByteArrays(resolverRequest, questionBytes);
 
-                    // Correct offset handling for multiple questions
+                    // Move offset correctly
                     offset += questionBytes.length;
                 }
+
 
 
 
@@ -296,6 +306,23 @@ class Question {
         return result;
     }
 
+    public byte[] toBytesUsingCompression(int offset) {
+        ByteBuffer buffer = ByteBuffer.allocate(512);
+        buffer.put((byte) 0xC0);  // Compression pointer
+        buffer.put((byte) offset); // Points to first occurrence of domain
+
+        buffer.putShort((short) recordType);
+        buffer.putShort((short) classType);
+
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
+
+        System.out.println("Compressed Question: " + name + " -> " + Main.bytesToHex(result, result.length));
+        return result;
+    }
+
+
     public static List<Question> fromBytes(int count, byte[] bytes, int offset) {
         List<Question> questions = new ArrayList<>();
         int currentOffset = offset;
@@ -332,6 +359,7 @@ class Question {
 
         return questions;
     }
+
 
 
 
