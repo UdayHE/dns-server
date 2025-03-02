@@ -4,49 +4,51 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
-public class Main {public static void main(String[] args) {
-    if (args.length < 2 || !args[0].equals("--resolver")) {
-        System.out.println("Usage: ./your_server --resolver <ip>:<port>");
-        return;
-    }
+public class Main {
 
-    String resolverAddress = args[1];
-    String[] resolverParts = resolverAddress.split(":");
-    String resolverIP = resolverParts[0];
-    int resolverPort = Integer.parseInt(resolverParts[1]);
-
-    System.out.println("DNS Forwarder started on port 2053...");
-    System.out.println("Forwarding DNS queries to: " + resolverIP + ":" + resolverPort);
-
-    try (DatagramSocket serverSocket = new DatagramSocket(2053)) {
-        while (true) {
-            final byte[] buf = new byte[512];
-            final DatagramPacket clientPacket = new DatagramPacket(buf, buf.length);
-            serverSocket.receive(clientPacket);
-
-            System.out.println("Received a DNS request.");
-
-            byte[] clientQuery = clientPacket.getData();
-            List<byte[]> responses = forwardQueries(clientQuery, resolverIP, resolverPort);
-
-            // Merge responses into a single packet
-            byte[] mergedResponse = mergeResponses(responses, clientQuery);
-
-            // Send the merged response to the client
-            DatagramPacket responsePacket = new DatagramPacket(
-                    mergedResponse, mergedResponse.length,
-                    clientPacket.getSocketAddress()
-            );
-
-            serverSocket.send(responsePacket);
-            System.out.println("Forwarded response to client.");
+    public static void main(String[] args) {
+        if (args.length < 2 || !args[0].equals("--resolver")) {
+            System.out.println("Usage: ./your_server --resolver <ip>:<port>");
+            return;
         }
-    } catch (IOException e) {
-        System.out.println("IOException: " + e.getMessage());
+
+        String resolverAddress = args[1];
+        String[] resolverParts = resolverAddress.split(":");
+        String resolverIP = resolverParts[0];
+        int resolverPort = Integer.parseInt(resolverParts[1]);
+
+        System.out.println("DNS Forwarder started on port 2053...");
+        System.out.println("Forwarding DNS queries to: " + resolverIP + ":" + resolverPort);
+
+        try (DatagramSocket serverSocket = new DatagramSocket(2053)) {
+            while (true) {
+                final byte[] buf = new byte[512];
+                final DatagramPacket clientPacket = new DatagramPacket(buf, buf.length);
+                serverSocket.receive(clientPacket);
+
+                System.out.println("Received a DNS request.");
+
+                byte[] clientQuery = clientPacket.getData();
+                byte[] resolverResponse = forwardQuery(clientQuery, resolverIP, resolverPort);
+
+                // ✅ Debug: Print final response before sending
+                System.out.println("Final response being sent: " + Arrays.toString(resolverResponse));
+
+                DatagramPacket responsePacket = new DatagramPacket(
+                        resolverResponse, resolverResponse.length,
+                        clientPacket.getSocketAddress()
+                );
+
+                serverSocket.send(responsePacket);
+                System.out.println("Forwarded response to client.");
+            }
+        } catch (IOException e) {
+            System.out.println("IOException: " + e.getMessage());
+        }
     }
-}
 
     private static List<byte[]> forwardQueries(byte[] query, String resolverIP, int resolverPort) throws IOException {
         List<byte[]> responses = new ArrayList<>();
@@ -87,12 +89,16 @@ public class Main {public static void main(String[] args) {
 
             byte[] responseData = resolverResponsePacket.getData();
 
-
             ByteBuffer responseWrapper = ByteBuffer.wrap(responseData);
-            short transactionId = responseWrapper.getShort(); // Read Transaction ID
-            short flags = responseWrapper.getShort(); // Read Flags
+            short transactionId = responseWrapper.getShort();
+            short flags = responseWrapper.getShort();
 
-            flags |= (1 << 15);
+            System.out.println("Received response ID: " + transactionId);
+            System.out.println("Received response flags (before modification): " + Integer.toBinaryString(flags));
+
+            flags |= (1 << 15); // ✅ Set QR bit to 1 (response)
+
+            System.out.println("Modified response flags (after setting QR): " + Integer.toBinaryString(flags));
 
             ByteBuffer modifiedResponse = ByteBuffer.allocate(responseData.length);
             modifiedResponse.putShort(transactionId);
@@ -104,10 +110,11 @@ public class Main {public static void main(String[] args) {
     }
 
 
-
     private static byte[] extractSingleQuestion(byte[] data, int offset) {
         int end = offset;
-        while (data[end] != 0) { end++; } // Find end of domain name
+        while (data[end] != 0) {
+            end++;
+        } // Find end of domain name
         end += 5; // Move past null byte + QTYPE (2 bytes) + QCLASS (2 bytes)
 
         return ByteBuffer.allocate(end - offset).put(data, offset, end - offset).array();
