@@ -85,16 +85,10 @@ public class DNSMessage {
         responseBuffer.putShort(0, transactionId); // Overwrite transaction ID to ensure it matches the request
 
         responseBuffer.putShort(responseFlags);
-//        responseBuffer.putShort(qdCount);
-//        responseBuffer.putShort(anCount);
-//        responseBuffer.putShort(nsCount);
-//        responseBuffer.putShort(arCount);
-
-        // Set proper counts to prevent mismatches
-        responseBuffer.putShort(4, (short) questions.size()); // Question count
-        responseBuffer.putShort(6,  answerCount);      // Answer count
-        responseBuffer.putShort(8, (short) 0); // Authority count (force zero)
-        responseBuffer.putShort(10, (short) 0); // Additional count (force zero)
+        responseBuffer.putShort(qdCount);
+        responseBuffer.putShort(anCount);
+        responseBuffer.putShort(nsCount);
+        responseBuffer.putShort(arCount);
 
 
         // Copy original question section (avoid mismatches)
