@@ -114,6 +114,7 @@ public class Main {
     private static String parseDomainName(ByteBuffer buffer, byte[] request) {
         StringBuilder domainName = new StringBuilder();
         int length;
+        int initialPosition = buffer.position();
 
         while ((length = buffer.get() & 0xFF) != 0) {
             if ((length & 0xC0) == 0xC0) {
@@ -126,11 +127,13 @@ public class Main {
                 for (int i = 0; i < length; i++) {
                     domainName.append((char) buffer.get());
                 }
-                if ((buffer.get(buffer.position()) & 0xFF) != 0) {
+                if ((buffer.position() < request.length) && ((buffer.get(buffer.position()) & 0xFF) != 0)) {
                     domainName.append(".");
                 }
+
             }
         }
+
         return domainName.toString();
     }
 
@@ -150,7 +153,7 @@ public class Main {
                     domainName.append((char) request[current + 1 + i]);
                 }
                 current += length + 1;
-                if ((request[current] & 0xFF) != 0) {
+                if (current < request.length && (request[current] & 0xFF) != 0) {
                     domainName.append(".");
                 }
                 length = request[current] & 0xFF;
@@ -181,14 +184,12 @@ public class Main {
         buffer.putShort((short) 0); // ARCOUNT
 
         // Question Section: Copy from the request
-        int questionSectionStart = 12; // Header is 12 bytes
-        int questionSectionLength = 0;
         ByteBuffer requestBuffer = ByteBuffer.wrap(request).order(ByteOrder.BIG_ENDIAN);
-        requestBuffer.position(questionSectionStart);
+        int questionStart = 12; // Header size
+        requestBuffer.position(questionStart);
 
-        for (int i = 0; i < dnsMessage.questions.size(); i++) {
-            String qName = dnsMessage.questions.get(i).qName;
-            writeDomainName(buffer, qName);
+        for (Question question : dnsMessage.questions) {
+            writeDomainName(buffer, question.qName);
             buffer.putShort((short) 1);  // Type A
             buffer.putShort((short) 1);  // Class IN
         }
