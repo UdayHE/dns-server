@@ -1,6 +1,7 @@
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.util.Arrays;
 
 public class Main {
   public static void main(String[] args){
@@ -16,6 +17,9 @@ public class Main {
 
          DNSMessage request = new DNSMessage(packet.getData());
          byte[] responseData = DNSMessage.createResponse(request);
+
+           System.out.println("Sending response: " + Arrays.toString(responseData));
+
          final DatagramPacket packetResponse = new DatagramPacket(responseData, responseData.length, packet.getSocketAddress());
          serverSocket.send(packetResponse);
        }
