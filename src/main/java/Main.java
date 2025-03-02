@@ -3,6 +3,7 @@ import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class Main {
@@ -83,7 +84,7 @@ public class Main {
                     offset += question.getByteSize();
                 }
 
-                System.out.println("Final Encoded Resolver Request: " + bytesToHex(resolverRequest, resolverRequest.length));
+                System.out.println("Final Resolver Request Bytes: " + Arrays.toString(resolverRequest));
                 System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
                 System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
 
