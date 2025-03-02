@@ -75,7 +75,7 @@ public class DNSMessage {
 
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
-        // **Ensure transaction ID matches original request**
+        // Ensure transaction ID matches original request
         responseBuffer.putShort(transactionId);
         responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
@@ -98,7 +98,7 @@ public class DNSMessage {
             responseBuffer.put(answerData);
         }
 
-        // **Set truncation flag if response exceeds limit**
+        // Set truncation flag if response exceeds limit
         if (responseBuffer.position() > MAX_UDP_SIZE) {
             System.out.println("[Warning] Response exceeded 512 bytes, setting truncation flag.");
             responseBuffer.putShort(2, (short) (responseBuffer.getShort(2) | 0x0200)); // Set TC flag
