@@ -87,21 +87,22 @@ public class Main {public static void main(String[] args) {
 
             byte[] responseData = resolverResponsePacket.getData();
 
-            // ✅ Ensure the QR bit is set to 1 (response)
-            ByteBuffer responseBufferWrapper = ByteBuffer.wrap(responseData);
-            short transactionId = responseBufferWrapper.getShort();
-            short flags = responseBufferWrapper.getShort();
 
-            flags |= (1 << 15); // Set QR bit to 1 (response)
+            ByteBuffer responseWrapper = ByteBuffer.wrap(responseData);
+            short transactionId = responseWrapper.getShort(); // Read Transaction ID
+            short flags = responseWrapper.getShort(); // Read Flags
 
-            ByteBuffer updatedResponse = ByteBuffer.allocate(responseData.length);
-            updatedResponse.putShort(transactionId);
-            updatedResponse.putShort(flags);
-            updatedResponse.put(responseData, 4, responseData.length - 4); // Copy rest of the response
+            flags |= (1 << 15);
 
-            return updatedResponse.array();
+            ByteBuffer modifiedResponse = ByteBuffer.allocate(responseData.length);
+            modifiedResponse.putShort(transactionId);
+            modifiedResponse.putShort(flags);
+            modifiedResponse.put(responseData, 4, responseData.length - 4); // Copy the rest of the response
+
+            return modifiedResponse.array();
         }
     }
+
 
 
     private static byte[] extractSingleQuestion(byte[] data, int offset) {
