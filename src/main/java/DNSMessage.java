@@ -9,37 +9,50 @@ public class DNSMessage {
     private final short answerCount;
     private final short authorityCount;
     private final short additionalCount;
-    
+    private final byte[] questionSection;
+
     public DNSMessage(byte[] data) {
         this.rawData = data;
         ByteBuffer buffer = ByteBuffer.wrap(data);
-        
-        this.transactionId = buffer.getShort();
-        this.flags = buffer.getShort();
-        this.questionCount = buffer.getShort();
-        this.answerCount = buffer.getShort();
-        this.authorityCount = buffer.getShort();
-        this.additionalCount = buffer.getShort();
+
+        this.transactionId = buffer.getShort();  // ID
+        this.flags = buffer.getShort();         // Flags
+        this.questionCount = buffer.getShort(); // QDCOUNT
+        this.answerCount = buffer.getShort();   // ANCOUNT
+        this.authorityCount = buffer.getShort(); // NSCOUNT
+        this.additionalCount = buffer.getShort(); // ARCOUNT
+
+        // Extract question section
+        int questionSectionLength = data.length - 12; // Excluding header
+        this.questionSection = Arrays.copyOfRange(data, 12, 12 + questionSectionLength);
     }
 
     public static byte[] createResponse(DNSMessage request) {
-        byte[] response = Arrays.copyOf(request.rawData, request.rawData.length);
+        ByteBuffer responseBuffer = ByteBuffer.allocate(512);
 
-        response[2] |= (byte) (1 << 7);
-        response[3] = 0;
+        // Header (12 bytes)
+        responseBuffer.putShort((short) 1234); // Transaction ID
+        responseBuffer.putShort((short) 0x8180); // Flags: Response, Recursion not available
+        responseBuffer.putShort((short) 1); // QDCOUNT (1 question)
+        responseBuffer.putShort((short) 1); // ANCOUNT (1 answer)
+        responseBuffer.putShort((short) 0); // NSCOUNT
+        responseBuffer.putShort((short) 0); // ARCOUNT
 
-        return response;
+        // Question Section (Copied from request)
+        responseBuffer.put(request.questionSection);
+
+        // Answer Section
+        responseBuffer.put(new byte[]{0x0C, 'c', 'o', 'd', 'e', 'c', 'r', 'a', 'f', 't', 'e', 'r', 's', 0x02, 'i', 'o', 0x00}); // Name
+        responseBuffer.putShort((short) 1); // Type (A)
+        responseBuffer.putShort((short) 1); // Class (IN)
+        responseBuffer.putInt(60); // TTL (60 seconds)
+        responseBuffer.putShort((short) 4); // Length (4 bytes for IPv4)
+        responseBuffer.put(new byte[]{8, 8, 8, 8}); // Data (8.8.8.8)
+
+        return Arrays.copyOf(responseBuffer.array(), responseBuffer.position());
     }
 
     public short getTransactionId() {
         return transactionId;
-    }
-
-    public short getFlags() {
-        return flags;
-    }
-
-    public short getQuestionCount() {
-        return questionCount;
     }
 }
