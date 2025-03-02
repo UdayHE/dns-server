@@ -3,6 +3,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DNSMessage {
+
     private final short transactionId;
     private final short flags;
     private final byte opcode;
@@ -151,7 +152,6 @@ public class DNSMessage {
         for (int i = 0; i < list.size(); i++) array[i] = list.get(i);
         return array;
     }
-
 
 
 }
