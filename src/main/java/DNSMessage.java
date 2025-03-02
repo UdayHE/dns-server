@@ -89,11 +89,12 @@ public class DNSMessage {
         }
 
         // Copy resolver answer section (ensuring no truncation)
-        int remainingBytes = resolverBuffer.remaining();
-        int answerSectionSize = Math.min(responseBuffer.remaining(), remainingBytes);
-        byte[] answerData = new byte[answerSectionSize];
-        resolverBuffer.get(answerData, 0, answerSectionSize);
-        responseBuffer.put(answerData);
+        int answerSectionSize = Math.min(resolverBuffer.remaining(), responseBuffer.remaining());
+        if (answerSectionSize > 0) {
+            byte[] answerData = new byte[answerSectionSize];
+            resolverBuffer.get(answerData, 0, answerSectionSize);
+            responseBuffer.put(answerData);
+        }
 
         // Ensure response doesn't exceed 512 bytes
         if (responseBuffer.position() > MAX_UDP_SIZE) {
@@ -104,14 +105,14 @@ public class DNSMessage {
         // Debugging Output
         System.out.println("[Debug] Response Size: " + responseBuffer.position());
         System.out.println("[Debug] Transaction ID: " + transactionId);
-        System.out.println("[Debug] Response Flags: " + responseFlags);
+        System.out.println("[Debug] Response Flags (Unsigned): " + (responseFlags & 0xFFFF));
         System.out.println("[Debug] Question Count: " + qdCount);
         System.out.println("[Debug] Answer Count: " + anCount);
         System.out.println("[Debug] Raw Resolver Response: " + java.util.Arrays.toString(resolverResponse));
 
         byte[] response = new byte[responseBuffer.position()];
         responseBuffer.rewind();
-        responseBuffer.get(response);
+        responseBuffer.get(response, 0, response.length);
 
         System.out.println("[Debug] First 20 Bytes of Response: " + java.util.Arrays.toString(java.util.Arrays.copyOf(response, 20)));
 
