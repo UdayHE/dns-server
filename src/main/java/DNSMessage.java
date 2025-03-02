@@ -82,13 +82,13 @@ public class DNSMessage {
 
 
         // Ensure transaction ID matches original request
-        responseBuffer.putShort(0, responseId); // Overwrite transaction ID to ensure it matches the request
+        responseBuffer.putShort(0, transactionId); // Overwrite transaction ID to ensure it matches the request
 
         responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
         responseBuffer.putShort(anCount);
-        responseBuffer.putShort(nsCount);
-        responseBuffer.putShort(arCount);
+//        responseBuffer.putShort(nsCount);
+//        responseBuffer.putShort(arCount);
         // Ignore Authority & Additional Sections
         responseBuffer.putShort(8, (short) 0); // Authority count
         responseBuffer.putShort(10, (short) 0); // Additional count
