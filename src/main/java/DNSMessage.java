@@ -68,37 +68,56 @@ public class DNSMessage {
         short nsCount = resolverBuffer.getShort();
         short arCount = resolverBuffer.getShort();
 
+        // Debug: Print extracted counts
+        System.out.println("ANCOUNT: " + anCount + ", NSCOUNT: " + nsCount + ", ARCOUNT: " + arCount);
+
         // Skip the question section
         int questionSectionSize = request.questionSections.stream().mapToInt(q -> q.length + 4).sum();
         resolverBuffer.position(12 + questionSectionSize);
 
-        // Extract the Answer Section
+        // Extract the Answer Section (Only if ANCOUNT > 0)
         List<byte[]> answers = new ArrayList<>();
-        for (int i = 0; i < anCount; i++) {
-            int answerStart = resolverBuffer.position();  // Track the answer section start
+        if (anCount > 0) {
+            for (int i = 0; i < anCount; i++) {
+                int remainingBytes = resolverBuffer.remaining();
+                if (remainingBytes < 12) {  // Minimum size of an answer
+                    System.out.println("❌ Not enough bytes left for answer section! Skipping.");
+                    break;
+                }
 
-            // Copy full answer record (Name, Type, Class, TTL, Data Length, IP Address)
-            byte[] namePointer = new byte[2];
-            resolverBuffer.get(namePointer);
-            short answerType = resolverBuffer.getShort();
-            short answerClass = resolverBuffer.getShort();
-            int ttl = resolverBuffer.getInt();
-            short dataLength = resolverBuffer.getShort();
-            byte[] answerData = new byte[dataLength];
-            resolverBuffer.get(answerData);
+                int answerStart = resolverBuffer.position();  // Track the answer section start
 
-            // Debug: Print extracted Answer IP
-            if (answerType == 1 && dataLength == 4) { // IPv4 Only
-                System.out.println("Extracted IPv4 Address: " +
-                        (answerData[0] & 0xFF) + "." + (answerData[1] & 0xFF) + "." +
-                        (answerData[2] & 0xFF) + "." + (answerData[3] & 0xFF));
+                // Copy full answer record (Name, Type, Class, TTL, Data Length, IP Address)
+                byte[] namePointer = new byte[2];
+                resolverBuffer.get(namePointer);
+                short answerType = resolverBuffer.getShort();
+                short answerClass = resolverBuffer.getShort();
+                int ttl = resolverBuffer.getInt();
+                short dataLength = resolverBuffer.getShort();
+
+                if (resolverBuffer.remaining() < dataLength) {
+                    System.out.println("❌ Not enough bytes left for answer data! Expected: " + dataLength + ", Available: " + resolverBuffer.remaining());
+                    break;
+                }
+
+                byte[] answerData = new byte[dataLength];
+                resolverBuffer.get(answerData);
+
+                // Debug: Print extracted Answer IP
+                if (answerType == 1 && dataLength == 4) { // IPv4 Only
+                    System.out.println("Extracted IPv4 Address: " +
+                            (answerData[0] & 0xFF) + "." + (answerData[1] & 0xFF) + "." +
+                            (answerData[2] & 0xFF) + "." + (answerData[3] & 0xFF));
+                }
+
+                // Store full answer
+                ByteBuffer answerBuffer = ByteBuffer.allocate(resolverBuffer.position() - answerStart);
+                resolverBuffer.position(answerStart);
+                resolverBuffer.get(answerBuffer.array());
+                answers.add(answerBuffer.array());
             }
-
-            // Store full answer
-            ByteBuffer answerBuffer = ByteBuffer.allocate(resolverBuffer.position() - answerStart);
-            resolverBuffer.position(answerStart);
-            resolverBuffer.get(answerBuffer.array());
-            answers.add(answerBuffer.array());
+        } else {
+            System.out.println("⚠ No answers in resolver response.");
         }
 
         // Correctly Allocate Response Buffer
@@ -127,6 +146,7 @@ public class DNSMessage {
 
         return responseBuffer.array();
     }
+
 
     private static List<Byte> byteArrayToList(byte[] array) {
         List<Byte> list = new ArrayList<>();
