@@ -62,6 +62,11 @@ public class Main {
                 int offset = 12;  // Start after the DNS header
 
                 List<Question> extractedQuestions = new ArrayList<>();
+
+                for (Question question : extractedQuestions) {
+                    System.out.println("Final Encoded Question: " + question + " -> " + Main.bytesToHex(question.toBytes(), question.toBytes().length));
+                }
+
                 for (int i = 0; i < recHeader.getQuestionCount(); i++) {
                     List<Question> questionList = Question.fromBytes(1, buffer, offset);
                     if (questionList.isEmpty()) {
@@ -263,14 +268,20 @@ class Question {
 
     public byte[] toBytes() {
         ByteBuffer buffer = ByteBuffer.allocate(512);
-        buffer.put(domainToBytes(name));
+        byte[] nameBytes = domainToBytes(name);
+
+        buffer.put(nameBytes);  // Preserve original compression if present
         buffer.putShort((short) recordType);
         buffer.putShort((short) classType);
+
         byte[] result = new byte[buffer.position()];
         buffer.flip();
         buffer.get(result);
+
+        System.out.println("Encoded Question: " + name + " -> " + Main.bytesToHex(result, result.length));
         return result;
     }
+
 
     public static List<Question> fromBytes(int count, byte[] bytes, int offset) {
         List<Question> questions = new ArrayList<>();
@@ -308,17 +319,15 @@ class Question {
         return result;
     }
 
-
-
     private static String bytesToName(byte[] bytes, int offset) {
         StringBuilder name = new StringBuilder();
         int i = offset;
         while (i < bytes.length && bytes[i] != 0) {
             int length = bytes[i] & 0xFF;
             i++;
-            if ((length & 0xC0) == 0xC0) {
+            if ((length & 0xC0) == 0xC0) {  // Compression pointer detected
                 int pointer = ((length & 0x3F) << 8) | (bytes[i] & 0xFF);
-                name.append(bytesToName(bytes, pointer));
+                name.append(bytesToName(bytes, pointer));  // Resolve compression
                 i++;
                 break;
             } else {
@@ -331,6 +340,7 @@ class Question {
         }
         return name.toString();
     }
+
 
     private static int findNullByte(byte[] bytes, int offset) {
         for (int i = offset; i < bytes.length; i++) {
