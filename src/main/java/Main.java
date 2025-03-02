@@ -50,7 +50,7 @@ public class Main {
                         recHeader.getRecursionDesired(),
                         recHeader.getOpcode() == 0 ? 0 : 4, // Response code
                         recHeader.getQuestionCount(),
-                        recHeader.getQuestionCount()
+                        recHeader.getQuestionCount() // Answer count should match the number of questions
                 );
 
                 byte[] response = responseHeader.toBytes();
@@ -87,6 +87,22 @@ public class Main {
                         answers.add(answerRaw);
                     }
 
+                    // Ensure the response header has the correct answer count
+                    responseHeader = new DnsPacketHeader(
+                            recHeader.getId(),
+                            1, // QR indicator
+                            recHeader.getOpcode(),
+                            recHeader.getRecursionDesired(),
+                            recHeader.getOpcode() == 0 ? 0 : 4, // Response code
+                            recHeader.getQuestionCount(),
+                            questions.size() // Answer count should match the number of questions
+                    );
+
+                    // Rebuild the response with the updated header
+                    response = responseHeader.toBytes();
+                    for (Question question : questions) {
+                        response = concatenateByteArrays(response, question.toBytes());
+                    }
                     for (byte[] answer : answers) {
                         response = concatenateByteArrays(response, answer);
                     }
@@ -120,6 +136,49 @@ public class Main {
         byte[] result = new byte[a.length + b.length];
         System.arraycopy(a, 0, result, 0, a.length);
         System.arraycopy(b, 0, result, a.length, b.length);
+        return result;
+    }
+
+    private static byte[] constructARecordAnswer(String name, String ipAddress) throws UnknownHostException {
+        ByteBuffer buffer = ByteBuffer.allocate(512);
+        buffer.put(domainToBytes(name));
+        buffer.putShort((short) 1); // Record type (A)
+        buffer.putShort((short) 1); // Class (IN)
+        buffer.putInt(3600); // TTL
+        buffer.putShort((short) 4); // RDATA length (4 bytes for IPv4)
+        buffer.put(InetAddress.getByName(ipAddress).getAddress()); // RDATA
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
+        return result;
+    }
+
+    private static byte[] constructUriRecordAnswer(String name, String uri) {
+        ByteBuffer buffer = ByteBuffer.allocate(512);
+        buffer.put(domainToBytes(name));
+        buffer.putShort((short) 256); // Record type (URI)
+        buffer.putShort((short) 1); // Class (IN)
+        buffer.putInt(3600); // TTL
+        byte[] uriBytes = uri.getBytes(StandardCharsets.UTF_8);
+        buffer.putShort((short) uriBytes.length); // RDATA length
+        buffer.put(uriBytes); // RDATA
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
+        return result;
+    }
+
+    private static byte[] domainToBytes(String domain) {
+        ByteBuffer buffer = ByteBuffer.allocate(512);
+        String[] labels = domain.split("\\.");
+        for (String label : labels) {
+            buffer.put((byte) label.length());
+            buffer.put(label.getBytes(StandardCharsets.UTF_8));
+        }
+        buffer.put((byte) 0);
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
         return result;
     }
 }
