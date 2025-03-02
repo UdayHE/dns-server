@@ -64,7 +64,7 @@ public class Main {
                 List<Question> extractedQuestions = new ArrayList<>();
 
                 for (Question question : extractedQuestions) {
-                    System.out.println("Final Encoded Question: " + question + " -> " + Main.bytesToHex(question.toBytes(), question.toBytes().length));
+                    System.out.println("Final Encoded Question: " + question.getName() + " -> " + Main.bytesToHex(question.toBytes(), question.toBytes().length));
                 }
 
                 for (int i = 0; i < recHeader.getQuestionCount(); i++) {
@@ -256,6 +256,7 @@ class DnsPacketHeader {
 }
 
 class Question {
+
     private String name;
     private int recordType;
     private int classType;
@@ -264,6 +265,10 @@ class Question {
         this.name = name;
         this.recordType = recordType;
         this.classType = classType;
+    }
+
+    public String getName() {
+        return name;
     }
 
     public byte[] toBytes() {
@@ -281,6 +286,7 @@ class Question {
         System.out.println("Encoded Question: " + name + " -> " + Main.bytesToHex(result, result.length));
         return result;
     }
+
 
 
     public static List<Question> fromBytes(int count, byte[] bytes, int offset) {
@@ -340,6 +346,7 @@ class Question {
         }
         return name.toString();
     }
+
 
 
     private static int findNullByte(byte[] bytes, int offset) {
