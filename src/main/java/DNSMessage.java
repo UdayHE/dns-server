@@ -22,17 +22,19 @@ public class DNSMessage {
         this.authorityCount = buffer.getShort(); // NSCOUNT
         this.additionalCount = buffer.getShort(); // ARCOUNT
 
-        // Extract question section
-        int questionSectionLength = data.length - 12; // Excluding header
+        // Extract question section (excluding 12-byte header)
+        int questionSectionLength = data.length - 12;
         this.questionSection = Arrays.copyOfRange(data, 12, 12 + questionSectionLength);
     }
 
     public static byte[] createResponse(DNSMessage request) {
-        ByteBuffer responseBuffer = ByteBuffer.allocate(512);
+        byte[] domainName = new byte[]{0x0C, 'c', 'o', 'd', 'e', 'c', 'r', 'a', 'f', 't', 'e', 'r', 's', 0x02, 'i', 'o', 0x00};
+        int responseSize = 12 + request.questionSection.length + domainName.length + 10; // Header + Question + Answer
+        ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
         // Header (12 bytes)
         responseBuffer.putShort((short) 1234); // Transaction ID
-        responseBuffer.putShort((short) 0x8180); // Flags: Response, Recursion not available
+        responseBuffer.putShort((short) 0x8180); // Flags: Response, No error
         responseBuffer.putShort((short) 1); // QDCOUNT (1 question)
         responseBuffer.putShort((short) 1); // ANCOUNT (1 answer)
         responseBuffer.putShort((short) 0); // NSCOUNT
@@ -42,14 +44,14 @@ public class DNSMessage {
         responseBuffer.put(request.questionSection);
 
         // Answer Section
-        responseBuffer.put(new byte[]{0x0C, 'c', 'o', 'd', 'e', 'c', 'r', 'a', 'f', 't', 'e', 'r', 's', 0x02, 'i', 'o', 0x00}); // Name
+        responseBuffer.put(domainName); // Name
         responseBuffer.putShort((short) 1); // Type (A)
         responseBuffer.putShort((short) 1); // Class (IN)
         responseBuffer.putInt(60); // TTL (60 seconds)
         responseBuffer.putShort((short) 4); // Length (4 bytes for IPv4)
         responseBuffer.put(new byte[]{8, 8, 8, 8}); // Data (8.8.8.8)
 
-        return Arrays.copyOf(responseBuffer.array(), responseBuffer.position());
+        return responseBuffer.array();
     }
 
     public short getTransactionId() {
