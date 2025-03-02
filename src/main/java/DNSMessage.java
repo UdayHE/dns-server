@@ -72,22 +72,21 @@ public class DNSMessage {
         int questionSectionSize = request.questionSections.stream().mapToInt(q -> q.length + 4).sum();
         if (resolverBuffer.remaining() < questionSectionSize) {
             System.out.println("⚠ Error: Resolver response too short for question section.");
-            return resolverResponse; // Return original response if parsing fails
+            return buildErrorResponse(request);
         }
 
-        // Move buffer position to the answer section
-        resolverBuffer.position(12 + questionSectionSize);
+        resolverBuffer.position(12 + questionSectionSize); // Move to answer section
 
         List<byte[]> answers = new ArrayList<>();
         for (int i = 0; i < anCount; i++) {
             if (resolverBuffer.remaining() < 12) { // Minimum answer record size
                 System.out.println("❌ Not enough bytes left for answer section!");
-                break;
+                return buildErrorResponse(request);
             }
 
             int answerStart = resolverBuffer.position();
-            byte[] nameField = new byte[2];
-            resolverBuffer.get(nameField);
+            int namePointer = resolverBuffer.getShort() & 0xFFFF;  // Handle compression
+            System.out.println("📌 Processing name pointer at: " + namePointer);
 
             short answerType = resolverBuffer.getShort();
             short answerClass = resolverBuffer.getShort();
@@ -96,14 +95,14 @@ public class DNSMessage {
 
             if (resolverBuffer.remaining() < dataLength) {
                 System.out.println("❌ Error: Not enough bytes left for answer data! Expected: " + dataLength + ", Available: " + resolverBuffer.remaining());
-                break;
+                return buildErrorResponse(request);
             }
 
             byte[] answerData = new byte[dataLength];
             resolverBuffer.get(answerData);
 
             if (answerType == 1 && dataLength == 4) { // IPv4 Address
-                System.out.println("✅ Extracted IPv4 Address: " +
+                System.out.println(" Extracted IPv4 Address: " +
                         (answerData[0] & 0xFF) + "." + (answerData[1] & 0xFF) + "." +
                         (answerData[2] & 0xFF) + "." + (answerData[3] & 0xFF));
             }
@@ -139,6 +138,29 @@ public class DNSMessage {
 
         return responseBuffer.array();
     }
+
+    private static byte[] buildErrorResponse(DNSMessage request) {
+        int responseSize = 12 + request.questionSections.stream().mapToInt(q -> q.length + 4).sum();
+        ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
+
+        responseBuffer.putShort(request.transactionId); // Copy ID
+        responseBuffer.putShort((short) 0x8182); // Flags: QR=1, RCODE=2 (Server Failure)
+        responseBuffer.putShort((short) request.questionSections.size()); // QDCOUNT
+        responseBuffer.putShort((short) 0); // ANCOUNT = 0 (no answer)
+        responseBuffer.putShort((short) 0); // NSCOUNT = 0
+        responseBuffer.putShort((short) 0); // ARCOUNT = 0
+
+        // Copy question section
+        for (byte[] question : request.questionSections) {
+            responseBuffer.put(question);
+            responseBuffer.putShort((short) 1); // Type A
+            responseBuffer.putShort((short) 1); // Class IN
+        }
+
+        System.out.println("⚠ Returning Server Failure Response");
+        return responseBuffer.array();
+    }
+
 
 
     private static List<Byte> byteArrayToList(byte[] array) {
