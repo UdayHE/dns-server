@@ -74,9 +74,15 @@ public class DNSMessage {
         short nsCount = resolverBuffer.getShort();
         short arCount = resolverBuffer.getShort();
 
-        // Enforce DNS header to be exactly 12 bytes
-        ByteBuffer responseBuffer = ByteBuffer.allocate(MAX_UDP_SIZE);
-        responseBuffer.putShort(transactionId); // Maintain the original transaction ID
+        // Allocate buffer dynamically based on response size
+        int responseSize = resolverResponse.length;
+        if (responseSize > MAX_UDP_SIZE) {
+            responseSize = MAX_UDP_SIZE;
+        }
+        ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
+
+        // Ensure transaction ID is retained
+        responseBuffer.putShort(transactionId);
         responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
         responseBuffer.putShort(anCount);
@@ -90,15 +96,15 @@ public class DNSMessage {
             responseBuffer.put(questionBytes);
         }
 
-        // Copy answer section from resolver (ensure all answers are included)
+        // Copy the entire answer section (truncate if needed)
         int remainingBytes = resolverBuffer.remaining();
         if (remainingBytes > 0) {
-            byte[] answerData = new byte[Math.min(remainingBytes, responseBuffer.remaining())]; // Prevent overflow
+            byte[] answerData = new byte[Math.min(remainingBytes, responseBuffer.remaining())];
             resolverBuffer.get(answerData);
             responseBuffer.put(answerData);
         }
 
-        // Check if the response exceeds 512 bytes, set truncation flag if needed
+        // If response exceeds limit, set truncation flag
         if (responseBuffer.position() > MAX_UDP_SIZE) {
             System.out.println("[Warning] Response exceeded 512 bytes, setting truncation flag.");
             responseBuffer.putShort(2, (short) (responseBuffer.getShort(2) | 0x0200)); // Set TC flag
