@@ -36,13 +36,22 @@ public class DNSMessage {
 
     private String parseDomainName(ByteBuffer buffer, byte[] data) {
         StringBuilder domainName = new StringBuilder();
+        int position = buffer.position();
+
         while (true) {
             int length = buffer.get() & 0xFF;
             if (length == 0) break;
-            if ((length & 0xC0) == 0xC0) { // Handle compressed name
+
+            // Handle name compression (first two bits set to 11)
+            if ((length & 0xC0) == 0xC0) {
                 int pointer = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
-                return parseDomainName(ByteBuffer.wrap(data, pointer, data.length - pointer), data);
+                int originalPosition = buffer.position();
+                buffer.position(pointer);
+                domainName.append(parseDomainName(buffer, data));
+                buffer.position(originalPosition);
+                break;
             }
+
             if (domainName.length() > 0) domainName.append(".");
             byte[] label = new byte[length];
             buffer.get(label);
@@ -74,7 +83,7 @@ public class DNSMessage {
             responseBuffer.put(question.toBytes());
         }
 
-        // Copy answer section from resolver
+        // Copy answer section from resolver (ensure all answers are included)
         int remainingBytes = resolverBuffer.remaining();
         if (remainingBytes > 0) {
             byte[] answerData = new byte[remainingBytes];

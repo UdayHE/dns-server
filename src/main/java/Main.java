@@ -35,8 +35,15 @@ public class Main {
                 serverSocket.receive(clientPacket);
                 System.out.println("Received DNS request from " + clientPacket.getSocketAddress());
 
+                // Parse DNS request
+                DNSMessage requestMessage = new DNSMessage(clientPacket.getData());
+
                 // Forward the query and get the response
-                byte[] response = forwardQuery(clientPacket.getData());
+                byte[] resolverResponse = forwardQuery(clientPacket.getData());
+
+                // Create a proper response with the correct transaction ID
+                DNSMessage responseMessage = new DNSMessage(resolverResponse);
+                byte[] response = responseMessage.createResponse(resolverResponse);
 
                 // Send response back to the client
                 DatagramPacket responsePacket = new DatagramPacket(
