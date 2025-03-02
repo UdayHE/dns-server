@@ -68,12 +68,9 @@ public class DNSMessage {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
         // Extract response header fields
-        short responseId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
         short qdCount = resolverBuffer.getShort();
         short anCount = resolverBuffer.getShort();
-        short nsCount = resolverBuffer.getShort();
-        short arCount = resolverBuffer.getShort();
 
         // Allocate buffer dynamically
         int responseSize = Math.min(resolverResponse.length, MAX_UDP_SIZE);
@@ -141,6 +138,7 @@ public class DNSMessage {
 
         return response;
     }
+
 
 
 
