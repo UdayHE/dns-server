@@ -24,12 +24,12 @@ public class DNSMessage {
         this.questionSections = new ArrayList<>();
         this.answerSections = new ArrayList<>();
 
-        int offset = 12; // Start after header
+        int offset = 12; // Start after the header
 
-        // ✅ Read all question sections
+        // Read question section
         for (int i = 0; i < qdCount; i++) {
             byte[] question = parseDomainName(data, offset);
-            offset += question.length + 4; // Move past QTYPE + QCLASS
+            offset += question.length + 4; // Skip QTYPE and QCLASS
             this.questionSections.add(question);
         }
     }
@@ -39,8 +39,7 @@ public class DNSMessage {
         while (data[offset] != 0) {
             if ((data[offset] & 0xC0) == 0xC0) { // Compressed name
                 int pointer = ((data[offset] & 0x3F) << 8) | (data[offset + 1] & 0xFF);
-                name.addAll(byteArrayToList(parseDomainName(data, pointer)));
-                return listToByteArray(name);
+                return parseDomainName(data, pointer); // Follow the pointer
             } else {
                 name.add(data[offset]);
                 for (int i = 0; i < data[offset]; i++) {
@@ -56,7 +55,7 @@ public class DNSMessage {
     public static byte[] createResponse(DNSMessage request, byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
-        // ✅ Extract Header Fields
+        // Extract Header Fields
         short transactionId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
         short qdCount = resolverBuffer.getShort();
@@ -64,14 +63,14 @@ public class DNSMessage {
         short nsCount = resolverBuffer.getShort();
         short arCount = resolverBuffer.getShort();
 
-        // ✅ Debug Logs
+        // Debug Logs
         System.out.println("ANCOUNT: " + anCount + ", NSCOUNT: " + nsCount + ", ARCOUNT: " + arCount);
 
-        // ✅ Skip Question Section
+        // Skip Question Section
         int questionSectionSize = request.questionSections.stream().mapToInt(q -> q.length + 4).sum();
         resolverBuffer.position(12 + questionSectionSize);
 
-        // ✅ Extract Answer Section Properly
+        // Extract Answer Section Properly
         List<byte[]> answers = new ArrayList<>();
         if (anCount > 0) {
             for (int i = 0; i < anCount; i++) {
@@ -80,7 +79,7 @@ public class DNSMessage {
                     return buildErrorResponse(request);
                 }
 
-                int nameStart = resolverBuffer.position();
+                int answerStart = resolverBuffer.position();
                 short nameField = resolverBuffer.getShort(); // Read name (could be pointer)
 
                 // Handle Compression Pointer
@@ -102,17 +101,17 @@ public class DNSMessage {
                 byte[] answerData = new byte[dataLength];
                 resolverBuffer.get(answerData);
 
-                // ✅ Debug: Extracted IPv4 Address
+                // Debug: Extracted IPv4 Address
                 if (answerType == 1 && dataLength == 4) {
-                    System.out.println("✅ Extracted IPv4 Address: " +
+                    System.out.println(" Extracted IPv4 Address: " +
                             (answerData[0] & 0xFF) + "." + (answerData[1] & 0xFF) + "." +
                             (answerData[2] & 0xFF) + "." + (answerData[3] & 0xFF));
                 }
 
                 // Store Full Answer Section
-                int answerSize = resolverBuffer.position() - nameStart;
+                int answerSize = resolverBuffer.position() - answerStart;
                 ByteBuffer answerBuffer = ByteBuffer.allocate(answerSize);
-                resolverBuffer.position(nameStart);
+                resolverBuffer.position(answerStart);
                 resolverBuffer.get(answerBuffer.array());
                 answers.add(answerBuffer.array());
             }
@@ -120,7 +119,7 @@ public class DNSMessage {
             System.out.println("⚠ No answers in resolver response.");
         }
 
-        // ✅ Correctly Allocate Response Buffer
+        // Correctly Allocate Response Buffer
         int responseSize = 12 + questionSectionSize + answers.stream().mapToInt(a -> a.length).sum();
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
@@ -131,14 +130,14 @@ public class DNSMessage {
         responseBuffer.putShort(nsCount); // Copy NSCOUNT
         responseBuffer.putShort(arCount); // Copy ARCOUNT
 
-        // ✅ Add the Question Section
+        // Add the Question Section
         for (byte[] question : request.questionSections) {
             responseBuffer.put(question);
             responseBuffer.putShort((short) 1); // Type (A)
             responseBuffer.putShort((short) 1); // Class (IN)
         }
 
-        // ✅ Add the Correct Answer Section
+        // Add the Correct Answer Section
         for (byte[] answer : answers) {
             responseBuffer.put(answer);
         }
