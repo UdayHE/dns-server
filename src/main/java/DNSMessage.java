@@ -3,6 +3,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DNSMessage {
+    private static final int MAX_UDP_SIZE = 512;
+    private static final int HEADER_SIZE = 12;
+
     private short transactionId;
     private short flags;
     private short questionCount;
@@ -63,6 +66,7 @@ public class DNSMessage {
     public byte[] createResponse(byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
+        // Read resolver response header
         short responseId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
         short qdCount = resolverBuffer.getShort();
@@ -70,11 +74,9 @@ public class DNSMessage {
         short nsCount = resolverBuffer.getShort();
         short arCount = resolverBuffer.getShort();
 
-        int estimatedSize = resolverResponse.length + 100;  // Ensure buffer is larger
-        if (estimatedSize > 512) estimatedSize = 512;  // Truncate oversized responses
-
-        ByteBuffer responseBuffer = ByteBuffer.allocate(estimatedSize);
-        responseBuffer.putShort(transactionId); // Maintain the original ID
+        // Enforce DNS header to be exactly 12 bytes
+        ByteBuffer responseBuffer = ByteBuffer.allocate(MAX_UDP_SIZE);
+        responseBuffer.putShort(transactionId); // Maintain the original transaction ID
         responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
         responseBuffer.putShort(anCount);
@@ -94,6 +96,12 @@ public class DNSMessage {
             byte[] answerData = new byte[Math.min(remainingBytes, responseBuffer.remaining())]; // Prevent overflow
             resolverBuffer.get(answerData);
             responseBuffer.put(answerData);
+        }
+
+        // Check if the response exceeds 512 bytes, set truncation flag if needed
+        if (responseBuffer.position() > MAX_UDP_SIZE) {
+            System.out.println("[Warning] Response exceeded 512 bytes, setting truncation flag.");
+            responseBuffer.putShort(2, (short) (responseBuffer.getShort(2) | 0x0200)); // Set TC flag
         }
 
         byte[] response = new byte[responseBuffer.position()];
