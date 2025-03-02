@@ -2,91 +2,64 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.util.Arrays;
 
 public class Main {
+    private static final int LISTEN_PORT = 2053;
+    private static final int BUFFER_SIZE = 512;
+    private static InetAddress resolverAddress;
+    private static int resolverPort;
 
     public static void main(String[] args) {
         if (args.length < 2 || !args[0].equals("--resolver")) {
-            System.out.println("Usage: ./your_server --resolver <ip>:<port>");
+            System.out.println("Usage: java DNSForwarder --resolver <ip>:<port>");
             return;
         }
 
-        String resolverAddress = args[1];
-        String[] resolverParts = resolverAddress.split(":");
-        String resolverIP = resolverParts[0];
-        int resolverPort = Integer.parseInt(resolverParts[1]);
+        try {
+            String[] resolverParts = args[1].split(":");
+            resolverAddress = InetAddress.getByName(resolverParts[0]);
+            resolverPort = Integer.parseInt(resolverParts[1]);
+        } catch (Exception e) {
+            System.err.println("Invalid resolver address.");
+            return;
+        }
 
-        System.out.println("DNS Forwarder started on port 2053...");
-        System.out.println("Forwarding DNS queries to: " + resolverIP + ":" + resolverPort);
+        System.out.println("DNS Forwarder started on port " + LISTEN_PORT);
+        System.out.println("Forwarding DNS queries to: " + resolverAddress.getHostAddress() + ":" + resolverPort);
 
-        try (DatagramSocket serverSocket = new DatagramSocket(2053)) {
+        try (DatagramSocket serverSocket = new DatagramSocket(LISTEN_PORT)) {
+            byte[] buffer = new byte[BUFFER_SIZE];
+
             while (true) {
-                final byte[] buf = new byte[512];
-                final DatagramPacket clientPacket = new DatagramPacket(buf, buf.length);
+                DatagramPacket clientPacket = new DatagramPacket(buffer, BUFFER_SIZE);
                 serverSocket.receive(clientPacket);
+                System.out.println("Received DNS request from " + clientPacket.getSocketAddress());
 
-                System.out.println("Received a DNS request.");
+                // Forward the query and get the response
+                byte[] response = forwardQuery(clientPacket.getData());
 
-                // Parse received query using `DNSMessage`
-                DNSMessage requestMessage = new DNSMessage(clientPacket.getData());
-
-                // Forward the query and get a response
-                byte[] resolverResponse = forwardQuery(clientPacket.getData(), resolverIP, resolverPort);
-
-                // Create a proper response with extracted IP
-                byte[] finalResponse = DNSMessage.createResponse(requestMessage, resolverResponse);
-
-                // Debugging
-                System.out.println("Final response being sent: " + Arrays.toString(finalResponse));
-
+                // Send response back to the client
                 DatagramPacket responsePacket = new DatagramPacket(
-                        finalResponse, finalResponse.length, clientPacket.getSocketAddress()
-                );
-
+                        response, response.length, clientPacket.getSocketAddress());
                 serverSocket.send(responsePacket);
                 System.out.println("Forwarded response to client.");
             }
         } catch (IOException e) {
-            System.out.println("IOException: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
-    /**
-     * Forwards a single DNS query to an upstream resolver and returns the response.
-     */
-    private static byte[] forwardQuery(byte[] query, String resolverIP, int resolverPort) throws IOException {
+    private static byte[] forwardQuery(byte[] query) throws IOException {
         try (DatagramSocket resolverSocket = new DatagramSocket()) {
-            InetAddress resolverInetAddress = InetAddress.getByName(resolverIP);
+            DatagramPacket requestPacket = new DatagramPacket(
+                    query, query.length, resolverAddress, resolverPort);
+            resolverSocket.send(requestPacket);
 
-            DatagramPacket resolverRequestPacket = new DatagramPacket(
-                    query, query.length, resolverInetAddress, resolverPort
-            );
+            byte[] responseBuffer = new byte[BUFFER_SIZE];
+            DatagramPacket responsePacket = new DatagramPacket(responseBuffer, BUFFER_SIZE);
+            resolverSocket.receive(responsePacket);
 
-            resolverSocket.send(resolverRequestPacket);
-
-            // Increase buffer size to avoid truncation
-            byte[] responseBuffer = new byte[4096];
-            DatagramPacket resolverResponsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
-            resolverSocket.receive(resolverResponsePacket);
-
-            byte[] responseData = Arrays.copyOf(resolverResponsePacket.getData(), resolverResponsePacket.getLength());
-
-            // Debugging: Print hex response
-            System.out.println("Final response (hex): " + bytesToHex(responseData));
-
-            return responseData;
+            return responsePacket.getData();
         }
-    }
-
-
-
-    // Helper function to convert byte arrays to hex strings for debugging
-    private static String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02X ", b));
-        }
-        return sb.toString();
     }
 }
