@@ -91,6 +91,7 @@ public class Main {
                         udpSocket.send(responsePacket);
                     }
                 } else {
+                    response = setQRFlag(response, response.length); // Ensure QR is set for manual responses
                     System.out.println("Forwarding modified response to client: " + bytesToHex(response, response.length));
                     DatagramPacket responsePacket = new DatagramPacket(response, response.length, packet.getSocketAddress());
                     udpSocket.send(responsePacket);
@@ -149,6 +150,7 @@ public class Main {
         return result;
     }
 }
+
 
 
 
