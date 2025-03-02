@@ -84,7 +84,6 @@ public class DNSMessage {
             responseBuffer.putShort((short) 1); // Class (IN)
             responseBuffer.putInt(60); // TTL (60 seconds)
             responseBuffer.putShort((short) 4); // Length (IPv4 address size)
-            responseBuffer.put(new byte[]{127, 0, 0, 1}); // Data (Example IP: 127.0.0.1)
         }
 
         return responseBuffer.array();

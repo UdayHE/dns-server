@@ -72,12 +72,9 @@ public class Main {
             DatagramPacket resolverResponsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
             resolverSocket.receive(resolverResponsePacket);
 
-            byte[] responseData = Arrays.copyOf(responseBuffer, resolverResponsePacket.getLength()); // Trim response
+            byte[] responseData = resolverResponsePacket.getData();
 
-            // ✅ Ensure QR bit is set
-            responseData[2] |= (1 << 7); // Set QR bit (bit 15)
-
-            // ✅ Debugging
+            // ✅ Do not modify the IP address, just return the exact response from resolver
             System.out.println("Final response (hex): " + bytesToHex(responseData));
 
             return responseData;
