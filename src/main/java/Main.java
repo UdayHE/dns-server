@@ -8,6 +8,7 @@ import java.util.List;
 
 public class Main {
     private static final int TIMEOUT_MS = 2000;
+    private static final int MAX_UDP_SIZE = 512;
 
     public static void main(String[] args) {
         if (args.length < 2 || !args[0].equals("--resolver")) {
@@ -20,7 +21,7 @@ public class Main {
 
         try {
             DatagramSocket udpSocket = new DatagramSocket(2053);
-            byte[] buffer = new byte[512];
+            byte[] buffer = new byte[MAX_UDP_SIZE];
 
             InetSocketAddress resolverSocketAddress = parseResolverAddress(resolverAddress);
             DatagramSocket resolverSocket = new DatagramSocket();
@@ -62,9 +63,8 @@ public class Main {
                 }
 
                 boolean overrideResponse = false;
-                byte[] resolverResponse = new byte[512];
+                byte[] resolverResponse = new byte[MAX_UDP_SIZE];
 
-                // Check if we need to override the response
                 for (Question question : extractedQuestions) {
                     if (question.getName().equalsIgnoreCase("abc.longassdomainname.com")) {
                         System.out.println("Overriding response for " + question.getName() + " -> 127.0.0.1");
@@ -75,21 +75,27 @@ public class Main {
                 }
 
                 if (!overrideResponse) {
-                    // Forward request to resolver
-                    DatagramPacket resolverRequestPacket = new DatagramPacket(buffer, packet.getLength(), resolverSocketAddress);
-                    resolverSocket.send(resolverRequestPacket);
+                    // Handle multiple questions by splitting and merging responses
+                    List<byte[]> mergedResponses = new ArrayList<>();
+                    for (Question question : extractedQuestions) {
+                        byte[] singleQueryPacket = createSingleQueryPacket(recHeader, question);
+                        DatagramPacket resolverRequestPacket = new DatagramPacket(singleQueryPacket, singleQueryPacket.length, resolverSocketAddress);
+                        resolverSocket.send(resolverRequestPacket);
 
-                    DatagramPacket resolverResponsePacket = new DatagramPacket(resolverResponse, resolverResponse.length);
-                    resolverSocket.receive(resolverResponsePacket);
+                        DatagramPacket resolverResponsePacket = new DatagramPacket(resolverResponse, resolverResponse.length);
+                        resolverSocket.receive(resolverResponsePacket);
 
-                    if (resolverResponsePacket.getLength() > 0) {
-                        byte[] actualResolverResponse = Arrays.copyOf(resolverResponse, resolverResponsePacket.getLength());
-                        byte[] modifiedResponse = setQRFlag(actualResolverResponse, resolverResponsePacket.getLength());
-
-                        System.out.println("Forwarding actual resolver response to client: " + bytesToHex(modifiedResponse, modifiedResponse.length));
-                        DatagramPacket responsePacket = new DatagramPacket(modifiedResponse, modifiedResponse.length, packet.getSocketAddress());
-                        udpSocket.send(responsePacket);
+                        if (resolverResponsePacket.getLength() > 0) {
+                            byte[] actualResolverResponse = Arrays.copyOf(resolverResponse, resolverResponsePacket.getLength());
+                            mergedResponses.add(actualResolverResponse);
+                        }
                     }
+
+                    // Merge multiple responses into one
+                    byte[] finalMergedResponse = mergeResponses(mergedResponses, recHeader.getId());
+                    DatagramPacket responsePacket = new DatagramPacket(finalMergedResponse, finalMergedResponse.length, packet.getSocketAddress());
+                    udpSocket.send(responsePacket);
+
                 } else {
                     response = setQRFlag(response, response.length); // Ensure QR is set for manual responses
                     System.out.println("Forwarding modified response to client: " + bytesToHex(response, response.length));
@@ -109,12 +115,32 @@ public class Main {
         return new InetSocketAddress(ip, port);
     }
 
-    static String bytesToHex(byte[] bytes, int length) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < length; i++) {
-            sb.append(String.format("%02X", bytes[i]));
+    private static byte[] createSingleQueryPacket(DnsPacketHeader header, Question question) {
+        byte[] questionBytes = question.toBytesUncompressed();
+        return concatenateByteArrays(header.toBytes(), questionBytes);
+    }
+
+    private static byte[] mergeResponses(List<byte[]> responses, int id) {
+        ByteBuffer buffer = ByteBuffer.allocate(MAX_UDP_SIZE);
+        buffer.putShort((short) id);
+
+        byte flags = (byte) (0x80 | 0x00);
+        buffer.put(flags);
+        buffer.put((byte) 0); // Flags part 2
+
+        buffer.putShort((short) responses.size()); // QDCOUNT
+        buffer.putShort((short) responses.size()); // ANCOUNT
+        buffer.putShort((short) 0); // NSCOUNT
+        buffer.putShort((short) 0); // ARCOUNT
+
+        for (byte[] response : responses) {
+            buffer.put(response, 12, response.length - 12); // Skip the first 12 bytes of each response
         }
-        return sb.toString();
+
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
+        return result;
     }
 
     private static byte[] concatenateByteArrays(byte[] a, byte[] b) {
@@ -126,22 +152,21 @@ public class Main {
 
     private static byte[] setQRFlag(byte[] response, int length) {
         if (length < 2) {
-            return response; // Safety check to ensure the packet is not malformed
+            return response;
         }
-        // Set QR flag (bit 7 of first byte)
         response[2] = (byte) (response[2] | 0x80);
         return response;
     }
 
     private static byte[] constructARecordAnswer(String domain, byte[] ipAddress) {
-        ByteBuffer buffer = ByteBuffer.allocate(512);
+        ByteBuffer buffer = ByteBuffer.allocate(MAX_UDP_SIZE);
         byte[] nameBytes = Question.domainToBytes(domain);
 
         buffer.put(nameBytes);
         buffer.putShort((short) 1);  // Type (A record)
         buffer.putShort((short) 1);  // Class (IN)
-        buffer.putInt(3600);         // TTL (3600 seconds)
-        buffer.putShort((short) 4);  // Data Length (4 bytes for IPv4)
+        buffer.putInt(60);           // TTL (shortened for tests)
+        buffer.putShort((short) 4);  // Data Length
         buffer.put(ipAddress);       // Custom IP Address
 
         byte[] result = new byte[buffer.position()];
@@ -149,7 +174,16 @@ public class Main {
         buffer.get(result);
         return result;
     }
+
+    static String bytesToHex(byte[] bytes, int length) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            sb.append(String.format("%02X", bytes[i]));
+        }
+        return sb.toString();
+    }
 }
+
 
 
 
