@@ -94,9 +94,14 @@ public class DNSMessage {
             int dataLength = resolverBuffer.getShort() & 0xFFFF;
 
             if (resolverBuffer.remaining() < dataLength) {
-                System.out.println("❌ Error: Not enough bytes left for answer data! Expected: " + dataLength + ", Available: " + resolverBuffer.remaining());
+                System.out.println("❌ Error: Not enough bytes left for answer data!");
+                System.out.println("ANCOUNT: " + anCount + ", Remaining Bytes: " + resolverBuffer.remaining());
+                System.out.println("Expected Data Length: " + dataLength);
+                System.out.println("Position: " + resolverBuffer.position());
+
                 return buildErrorResponse(request);
             }
+
 
             byte[] answerData = new byte[dataLength];
             resolverBuffer.get(answerData);
