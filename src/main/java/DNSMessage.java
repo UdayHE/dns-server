@@ -55,7 +55,7 @@ public class DNSMessage {
         return listToByteArray(name);
     }
 
-    public static byte[] createResponse(DNSMessage request) {
+    public static byte[] createResponse(DNSMessage request, byte[] resolverResponse) {
         int responseSize = 12 + request.questionSections.stream().mapToInt(q -> q.length + 4).sum()
                 + request.answerCount * (request.questionSections.get(0).length + 16);
 
@@ -72,22 +72,37 @@ public class DNSMessage {
         responseBuffer.putShort((short) 0); // NSCOUNT
         responseBuffer.putShort((short) 0); // ARCOUNT
 
+        // Add the question section back
         for (byte[] question : request.questionSections) {
             responseBuffer.put(question);
             responseBuffer.putShort((short) 1); // Type (A)
             responseBuffer.putShort((short) 1); // Class (IN)
         }
 
+        // ✅ Extract IP from resolver response
+        ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
+        resolverBuffer.position(resolverResponse.length - 4); // Move to last 4 bytes (IPv4 address)
+        byte[] ipAddress = new byte[4];
+        resolverBuffer.get(ipAddress); // Read IP
+
+        // ✅ Debug: Print extracted IP
+        System.out.println("Extracted IPv4 Address: " +
+                (ipAddress[0] & 0xFF) + "." + (ipAddress[1] & 0xFF) + "." +
+                (ipAddress[2] & 0xFF) + "." + (ipAddress[3] & 0xFF));
+
+        // Add answer section
         for (byte[] question : request.questionSections) {
             responseBuffer.put(question); // Name (Uncompressed)
             responseBuffer.putShort((short) 1); // Type (A)
             responseBuffer.putShort((short) 1); // Class (IN)
             responseBuffer.putInt(60); // TTL (60 seconds)
             responseBuffer.putShort((short) 4); // Length (IPv4 address size)
+            responseBuffer.put(ipAddress); // ✅ Use correct IP from resolver
         }
 
         return responseBuffer.array();
     }
+
 
     private static List<Byte> byteArrayToList(byte[] array) {
         List<Byte> list = new ArrayList<>();
