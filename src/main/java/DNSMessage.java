@@ -10,6 +10,7 @@ public class DNSMessage {
     private final short authorityCount;
     private final short additionalCount;
     private final byte[] questionSection;
+    private final int questionEndIndex;
 
     public DNSMessage(byte[] data) {
         this.rawData = data;
@@ -22,17 +23,19 @@ public class DNSMessage {
         this.authorityCount = buffer.getShort(); // NSCOUNT
         this.additionalCount = buffer.getShort(); // ARCOUNT
 
-        // Extract question section (excluding 12-byte header)
-        int questionSectionLength = data.length - 12;
-        this.questionSection = Arrays.copyOfRange(data, 12, 12 + questionSectionLength);
+        // Extract question section
+        int index = 12; // Start after header
+        while (data[index] != 0) { index++; } // Domain name ends with 0x00
+        index += 5; // Move past null byte + QTYPE (2 bytes) + QCLASS (2 bytes)
+        this.questionEndIndex = index;
+
+        this.questionSection = Arrays.copyOfRange(data, 12, questionEndIndex);
     }
 
     public static byte[] createResponse(DNSMessage request) {
-        byte[] domainName = new byte[]{0x0C, 'c', 'o', 'd', 'e', 'c', 'r', 'a', 'f', 't', 'e', 'r', 's', 0x02, 'i', 'o', 0x00};
-        int responseSize = 12 + request.questionSection.length + domainName.length + 10; // Header + Question + Answer
+        int responseSize = request.questionEndIndex + 16;
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
-        // Header (12 bytes)
         responseBuffer.putShort((short) 1234); // Transaction ID
         responseBuffer.putShort((short) 0x8180); // Flags: Response, No error
         responseBuffer.putShort((short) 1); // QDCOUNT (1 question)
@@ -40,16 +43,15 @@ public class DNSMessage {
         responseBuffer.putShort((short) 0); // NSCOUNT
         responseBuffer.putShort((short) 0); // ARCOUNT
 
-        // Question Section (Copied from request)
+
         responseBuffer.put(request.questionSection);
 
-        // Answer Section
-        responseBuffer.put(domainName); // Name
+        responseBuffer.put(request.questionSection); // Name (use same format from question)
         responseBuffer.putShort((short) 1); // Type (A)
         responseBuffer.putShort((short) 1); // Class (IN)
         responseBuffer.putInt(60); // TTL (60 seconds)
-        responseBuffer.putShort((short) 4); // Length (4 bytes for IPv4)
-        responseBuffer.put(new byte[]{8, 8, 8, 8}); // Data (8.8.8.8)
+        responseBuffer.putShort((short) 4); // Length (IPv4 address size)
+        responseBuffer.put(new byte[]{8, 8, 8, 8}); // Data (IP: 8.8.8.8)
 
         return responseBuffer.array();
     }
