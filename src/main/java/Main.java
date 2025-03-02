@@ -80,8 +80,7 @@ public class Main {
         DNSMessage dnsMessage = parseDnsQuery(request);
 
         // Build the DNS response
-        byte[] response = buildDnsResponse(dnsMessage);
-
+        byte[] response = buildDnsResponse(dnsMessage, request);
         return response;
     }
 
@@ -89,7 +88,7 @@ public class Main {
         DNSMessage dnsMessage = new DNSMessage();
         ByteBuffer buffer = ByteBuffer.wrap(request).order(ByteOrder.BIG_ENDIAN);
 
-        // Parse Header (Stage 5 & onwards)
+        // Parse Header
         dnsMessage.id = buffer.getShort();
         short flags = buffer.getShort();
         dnsMessage.qr = (flags >> 15) & 1;
@@ -100,10 +99,10 @@ public class Main {
         dnsMessage.nsCount = buffer.getShort();
         dnsMessage.arCount = buffer.getShort();
 
-        //Parse Questions (Stage 6 & 7)
+        // Parse Questions
         for (int i = 0; i < dnsMessage.qdCount; i++) {
             Question question = new Question();
-            question.qName = parseDomainName(buffer, request);  // Pass the entire request byte array
+            question.qName = parseDomainName(buffer, request);
             question.qType = buffer.getShort();
             question.qClass = buffer.getShort();
             dnsMessage.questions.add(question);
@@ -114,21 +113,20 @@ public class Main {
 
     private static String parseDomainName(ByteBuffer buffer, byte[] request) {
         StringBuilder domainName = new StringBuilder();
-        int length = buffer.get() & 0xFF;  // Ensure unsigned value
+        int length;
 
-        while (length != 0) {
+        while ((length = buffer.get() & 0xFF) != 0) {
             if ((length & 0xC0) == 0xC0) {
-                // Compressed label (Stage 7)
+                // Compressed label
                 int offset = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
-                domainName.append(parseCompressedName(request, offset));  //Use a separate method for resolving compression to prevent issues with the ByteBuffer's internal state.
+                domainName.append(parseCompressedName(request, offset));
                 return domainName.toString();
             } else {
                 // Uncompressed label
                 for (int i = 0; i < length; i++) {
                     domainName.append((char) buffer.get());
                 }
-                length = buffer.get() & 0xFF;
-                if (length != 0) {
+                if ((buffer.get(buffer.position()) & 0xFF) != 0) {
                     domainName.append(".");
                 }
             }
@@ -143,7 +141,7 @@ public class Main {
 
         while (length != 0) {
             if ((length & 0xC0) == 0xC0) {
-                // Recursive compression (should be rare, but handle it)
+                // Recursive compression
                 int newOffset = ((length & 0x3F) << 8) | (request[current + 1] & 0xFF);
                 return parseCompressedName(request, newOffset);
             } else {
@@ -161,12 +159,11 @@ public class Main {
         return domainName.toString();
     }
 
-
-    static byte[] buildDnsResponse(DNSMessage dnsMessage) {
+    static byte[] buildDnsResponse(DNSMessage dnsMessage, byte[] request) {
         ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
 
-        // Build Header (Stages 2 & 5)
-        buffer.putShort(dnsMessage.id); // ID
+        // Header
+        buffer.putShort(dnsMessage.id);
         short flags = (short) 0;
 
         flags |= (1 << 15);  // QR = 1 (response)
@@ -175,30 +172,35 @@ public class Main {
         flags |= (0 << 9); // TC = 0
         flags |= (dnsMessage.rd << 8); // RD from request
         flags |= (0 << 7); // RA = 0
+        flags |= (dnsMessage.opCode != 0 ? 4 : 0); // RCODE
 
-        flags |= (dnsMessage.opCode != 0 ? 4 : 0); // RCODE (Stage 5)
         buffer.putShort(flags);
-
         buffer.putShort((short) dnsMessage.questions.size()); // QDCOUNT
-        buffer.putShort((short) dnsMessage.questions.size()); // ANCOUNT (one answer per question)
+        buffer.putShort((short) dnsMessage.questions.size()); // ANCOUNT
         buffer.putShort((short) 0); // NSCOUNT
         buffer.putShort((short) 0); // ARCOUNT
 
-        // Build Question Section (Stages 3 & 6)
-        for (Question question : dnsMessage.questions) {
-            writeDomainName(buffer, question.qName);  //QNAME
-            buffer.putShort(question.qType); // QTYPE
-            buffer.putShort(question.qClass); // QCLASS
+        // Question Section: Copy from the request
+        int questionSectionStart = 12; // Header is 12 bytes
+        int questionSectionLength = 0;
+        ByteBuffer requestBuffer = ByteBuffer.wrap(request).order(ByteOrder.BIG_ENDIAN);
+        requestBuffer.position(questionSectionStart);
+
+        for (int i = 0; i < dnsMessage.questions.size(); i++) {
+            String qName = dnsMessage.questions.get(i).qName;
+            writeDomainName(buffer, qName);
+            buffer.putShort((short) 1);  // Type A
+            buffer.putShort((short) 1);  // Class IN
         }
 
-        // Build Answer Section (Stage 4)
+        // Answer Section
         for (Question question : dnsMessage.questions) {
-            writeDomainName(buffer, question.qName); // NAME
-            buffer.putShort((short) 1);  // TYPE (A record)
-            buffer.putShort((short) 1);  // CLASS (IN)
+            writeDomainName(buffer, question.qName); // Name
+            buffer.putShort((short) 1); // Type A
+            buffer.putShort((short) 1); // Class IN
             buffer.putInt(60); // TTL
-            buffer.putShort((short) 4); // RDLENGTH
-            buffer.put((byte) 8);  //IP Address
+            buffer.putShort((short) 4); // Data length
+            buffer.put((byte) 8);  // IP Address
             buffer.put((byte) 8);
             buffer.put((byte) 8);
             buffer.put((byte) 8);
@@ -234,7 +236,6 @@ public class Main {
         public short anCount;
         public short nsCount;
         public short arCount;
-
         public List<Question> questions = new ArrayList<>();
     }
 
