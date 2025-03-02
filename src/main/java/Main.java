@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class Main {
@@ -58,7 +59,7 @@ public class Main {
             DatagramPacket response = new DatagramPacket(responseBuffer, responseBuffer.length);
             socket.receive(response);
 
-            return response.getData();
+            return Arrays.copyOfRange(response.getData(), 0, response.getLength());
         } catch (IOException e) {
             System.err.println("Error forwarding DNS query: " + e.getMessage());
             return null;
@@ -67,7 +68,7 @@ public class Main {
 
     static byte[] handleDnsQuery(byte[] request) {
         DNSMessage dnsMessage = parseDnsQuery(request);
-        return buildDnsResponse(dnsMessage);
+        return buildDnsResponse(dnsMessage, request);
     }
 
     static DNSMessage parseDnsQuery(byte[] request) {
@@ -98,7 +99,7 @@ public class Main {
     private static String parseDomainName(ByteBuffer buffer, byte[] request) {
         StringBuilder domainName = new StringBuilder();
         int length;
-        int initialPosition = buffer.position();
+        int originalPos = buffer.position();
 
         while ((length = buffer.get() & 0xFF) != 0) {
             if ((length & 0xC0) == 0xC0) {
@@ -138,15 +139,14 @@ public class Main {
         return domainName.toString();
     }
 
-    static byte[] buildDnsResponse(DNSMessage dnsMessage) {
+    static byte[] buildDnsResponse(DNSMessage dnsMessage, byte[] request) {
         ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
-
         buffer.putShort(dnsMessage.id);
-        buffer.putShort((short) 0x8180);
+        buffer.putShort((short) 0x8180); // QR=1, RD=1, RA=1, RCODE=0
         buffer.putShort((short) dnsMessage.questions.size());
-        buffer.putShort((short) dnsMessage.questions.size());
-        buffer.putShort((short) 0);
-        buffer.putShort((short) 0);
+        buffer.putShort((short) dnsMessage.questions.size()); // ANCOUNT
+        buffer.putShort((short) 0); // NSCOUNT
+        buffer.putShort((short) 0); // ARCOUNT
 
         for (Question question : dnsMessage.questions) {
             writeDomainName(buffer, question.qName);
@@ -156,14 +156,14 @@ public class Main {
 
         for (Question question : dnsMessage.questions) {
             writeDomainName(buffer, question.qName);
-            buffer.putShort((short) 1);
-            buffer.putShort((short) 1);
-            buffer.putInt(3600);
-            buffer.putShort((short) 4);
-            buffer.put((byte) 127);
+            buffer.putShort((short) 1); // TYPE A
+            buffer.putShort((short) 1); // CLASS IN
+            buffer.putInt(3600); // TTL
+            buffer.putShort((short) 4); // RDLENGTH
+            buffer.put((byte) 127); // RDATA (IP address)
             buffer.put((byte) 0);
             buffer.put((byte) 0);
-            buffer.put((byte) 2);
+            buffer.put((byte) 1);
         }
 
         buffer.flip();
