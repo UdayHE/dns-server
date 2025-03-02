@@ -39,7 +39,6 @@ public class DNSMessage {
 
     private String parseDomainName(ByteBuffer buffer, byte[] data) {
         StringBuilder domainName = new StringBuilder();
-
         while (true) {
             int length = buffer.get() & 0xFF;
             if (length == 0) break;
@@ -76,21 +75,21 @@ public class DNSMessage {
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
         // Ensure transaction ID matches original request
-        responseBuffer.putShort(0, transactionId);
+        responseBuffer.putShort(transactionId); // Set the correct transaction ID
         responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
         responseBuffer.putShort(anCount);
         responseBuffer.putShort(nsCount);
         responseBuffer.putShort(arCount);
 
-        // Copy original question section (to avoid mismatches)
+        // Copy original question section (avoid mismatches)
         for (Question question : questions) {
             byte[] questionBytes = question.toBytes();
             if (responseBuffer.remaining() < questionBytes.length) break;
             responseBuffer.put(questionBytes);
         }
 
-        // Copy resolver answer section (truncate if needed)
+        // Copy resolver answer section (ensuring no truncation)
         int remainingBytes = resolverBuffer.remaining();
         if (remainingBytes > 0) {
             byte[] answerData = new byte[Math.min(remainingBytes, responseBuffer.remaining())];
@@ -98,20 +97,23 @@ public class DNSMessage {
             responseBuffer.put(answerData);
         }
 
-        // Set truncation flag if response exceeds limit
+        // Ensure response doesn't exceed 512 bytes
         if (responseBuffer.position() > MAX_UDP_SIZE) {
             System.out.println("[Warning] Response exceeded 512 bytes, setting truncation flag.");
             responseBuffer.putShort(2, (short) (responseBuffer.getShort(2) | 0x0200)); // Set TC flag
         }
 
+        // Debugging Output
+        System.out.println("[Debug] Response Size: " + responseBuffer.position());
+        System.out.println("[Debug] Transaction ID: " + transactionId);
+        System.out.println("[Debug] Response Flags: " + responseFlags);
+        System.out.println("[Debug] Question Count: " + qdCount);
+        System.out.println("[Debug] Answer Count: " + anCount);
+        System.out.println("[Debug] Raw Resolver Response: " + java.util.Arrays.toString(resolverResponse));
+
         byte[] response = new byte[responseBuffer.position()];
         responseBuffer.rewind();
         responseBuffer.get(response);
-
-        System.out.println("[Debug] Response Size: " + response.length);
-        System.out.println("[Debug] Transaction ID: " + transactionId);
-        System.out.println("[Debug] Response Flags: " + responseFlags);
-
         return response;
     }
 }
