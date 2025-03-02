@@ -74,14 +74,12 @@ public class Main {
 
                     resolverRequest = concatenateByteArrays(resolverRequest, question.toBytes());
 
-                    // Move offset properly (use domain compression if needed)
+                    // Move offset properly
                     offset += question.getByteSize();
                 }
 
+                System.out.println("Final Encoded Resolver Request: " + bytesToHex(resolverRequest, resolverRequest.length));
                 System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
-
-
-
                 System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
 
                 DatagramPacket resolverPacket = new DatagramPacket(resolverRequest, resolverRequest.length, resolverSocketAddress);
@@ -309,6 +307,7 @@ class Question {
         System.out.println("Encoded Domain: " + domain + " -> " + Main.bytesToHex(result, result.length));
         return result;
     }
+
 
 
     private static String bytesToName(byte[] bytes, int offset) {
