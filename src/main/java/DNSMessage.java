@@ -163,11 +163,6 @@ public class DNSMessage {
         return errorBuffer.array();
     }
 
-    private static List<Byte> byteArrayToList(byte[] array) {
-        List<Byte> list = new ArrayList<>();
-        for (byte b : array) list.add(b);
-        return list;
-    }
 
     private static byte[] listToByteArray(List<Byte> list) {
         byte[] array = new byte[list.size()];
