@@ -76,7 +76,7 @@ public class DNSMessage {
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
         // Ensure transaction ID matches original request
-        responseBuffer.putShort(transactionId);
+        responseBuffer.putShort(0, transactionId);
         responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
         responseBuffer.putShort(anCount);
@@ -107,6 +107,11 @@ public class DNSMessage {
         byte[] response = new byte[responseBuffer.position()];
         responseBuffer.rewind();
         responseBuffer.get(response);
+
+        System.out.println("[Debug] Response Size: " + response.length);
+        System.out.println("[Debug] Transaction ID: " + transactionId);
+        System.out.println("[Debug] Response Flags: " + responseFlags);
+
         return response;
     }
 }
