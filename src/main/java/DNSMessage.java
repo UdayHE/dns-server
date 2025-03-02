@@ -69,10 +69,9 @@ public class DNSMessage {
         short arCount = resolverBuffer.getShort();
 
         // Allocate buffer dynamically
-        int responseSize = resolverResponse.length;
-        if (responseSize > MAX_UDP_SIZE) responseSize = MAX_UDP_SIZE; // Enforce UDP limit
-
+        int responseSize = Math.min(resolverResponse.length, MAX_UDP_SIZE);
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
+
 
         // Ensure transaction ID matches original request
         responseBuffer.putShort(transactionId); // Set the correct transaction ID
@@ -91,11 +90,10 @@ public class DNSMessage {
 
         // Copy resolver answer section (ensuring no truncation)
         int remainingBytes = resolverBuffer.remaining();
-        if (remainingBytes > 0) {
-            byte[] answerData = new byte[Math.min(remainingBytes, responseBuffer.remaining())];
-            resolverBuffer.get(answerData);
-            responseBuffer.put(answerData);
-        }
+        int answerSectionSize = Math.min(responseBuffer.remaining(), remainingBytes);
+        byte[] answerData = new byte[answerSectionSize];
+        resolverBuffer.get(answerData, 0, answerSectionSize);
+        responseBuffer.put(answerData);
 
         // Ensure response doesn't exceed 512 bytes
         if (responseBuffer.position() > MAX_UDP_SIZE) {
@@ -114,6 +112,9 @@ public class DNSMessage {
         byte[] response = new byte[responseBuffer.position()];
         responseBuffer.rewind();
         responseBuffer.get(response);
+
+        System.out.println("[Debug] First 20 Bytes of Response: " + java.util.Arrays.toString(java.util.Arrays.copyOf(response, 20)));
+
         return response;
     }
 }
