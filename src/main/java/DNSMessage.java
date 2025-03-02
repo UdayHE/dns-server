@@ -14,9 +14,8 @@ public class DNSMessage {
     public DNSMessage(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data);
 
-        this.transactionId = buffer.getShort();  // Extract ID
-        this.flags = buffer.getShort(); // Extract Flags
-
+        this.transactionId = buffer.getShort();
+        this.flags = buffer.getShort();
         this.opcode = (byte) ((this.flags >> 11) & 0x0F);
         this.recursionDesired = ((this.flags >> 8) & 1) == 1;
         this.responseCode = (this.opcode == 0) ? (byte) 0 : (byte) 4;
@@ -141,7 +140,6 @@ public class DNSMessage {
     }
 
 
-
     private static List<Byte> byteArrayToList(byte[] array) {
         List<Byte> list = new ArrayList<>();
         for (byte b : array) list.add(b);
@@ -153,4 +151,8 @@ public class DNSMessage {
         for (int i = 0; i < list.size(); i++) array[i] = list.get(i);
         return array;
     }
+
+
+
 }
+
