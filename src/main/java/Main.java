@@ -4,7 +4,9 @@ import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class Main {
 
@@ -101,7 +103,7 @@ public class Main {
         //Parse Questions (Stage 6 & 7)
         for (int i = 0; i < dnsMessage.qdCount; i++) {
             Question question = new Question();
-            question.qName = parseDomainName(buffer);
+            question.qName = parseDomainName(buffer, request);  // Pass the entire request byte array
             question.qType = buffer.getShort();
             question.qClass = buffer.getShort();
             dnsMessage.questions.add(question);
@@ -110,7 +112,7 @@ public class Main {
         return dnsMessage;
     }
 
-    private static String parseDomainName(ByteBuffer buffer) {
+    private static String parseDomainName(ByteBuffer buffer, byte[] request) {
         StringBuilder domainName = new StringBuilder();
         int length = buffer.get() & 0xFF;  // Ensure unsigned value
 
@@ -118,10 +120,7 @@ public class Main {
             if ((length & 0xC0) == 0xC0) {
                 // Compressed label (Stage 7)
                 int offset = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
-                int currentPosition = buffer.position();
-                buffer.position(offset);
-                domainName.append(parseDomainName(buffer));
-                buffer.position(currentPosition);
+                domainName.append(parseCompressedName(request, offset));  //Use a separate method for resolving compression to prevent issues with the ByteBuffer's internal state.
                 return domainName.toString();
             } else {
                 // Uncompressed label
@@ -137,6 +136,32 @@ public class Main {
         return domainName.toString();
     }
 
+    private static String parseCompressedName(byte[] request, int offset) {
+        StringBuilder domainName = new StringBuilder();
+        int length = request[offset] & 0xFF;
+        int current = offset;
+
+        while (length != 0) {
+            if ((length & 0xC0) == 0xC0) {
+                // Recursive compression (should be rare, but handle it)
+                int newOffset = ((length & 0x3F) << 8) | (request[current + 1] & 0xFF);
+                return parseCompressedName(request, newOffset);
+            } else {
+                // Uncompressed label within the compressed name
+                for (int i = 0; i < length; i++) {
+                    domainName.append((char) request[current + 1 + i]);
+                }
+                current += length + 1;
+                if ((request[current] & 0xFF) != 0) {
+                    domainName.append(".");
+                }
+                length = request[current] & 0xFF;
+            }
+        }
+        return domainName.toString();
+    }
+
+
     static byte[] buildDnsResponse(DNSMessage dnsMessage) {
         ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
 
@@ -150,6 +175,7 @@ public class Main {
         flags |= (0 << 9); // TC = 0
         flags |= (dnsMessage.rd << 8); // RD from request
         flags |= (0 << 7); // RA = 0
+
         flags |= (dnsMessage.opCode != 0 ? 4 : 0); // RCODE (Stage 5)
         buffer.putShort(flags);
 
@@ -209,7 +235,7 @@ public class Main {
         public short nsCount;
         public short arCount;
 
-        public java.util.List<Question> questions = new java.util.ArrayList<>();
+        public List<Question> questions = new ArrayList<>();
     }
 
     static class Question {
