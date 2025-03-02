@@ -28,16 +28,16 @@ public class Main {
 
                 System.out.println("Received a DNS request.");
 
-                // ✅ Parse received query using `DNSMessage`
+                // Parse received query using `DNSMessage`
                 DNSMessage requestMessage = new DNSMessage(clientPacket.getData());
 
-                // ✅ Forward the query and get a response
+                // Forward the query and get a response
                 byte[] resolverResponse = forwardQuery(clientPacket.getData(), resolverIP, resolverPort);
 
-                // ✅ Create a proper response with extracted IP
+                // Create a proper response with extracted IP
                 byte[] finalResponse = DNSMessage.createResponse(requestMessage, resolverResponse);
 
-                // ✅ Debugging
+                // Debugging
                 System.out.println("Final response being sent: " + Arrays.toString(finalResponse));
 
                 DatagramPacket responsePacket = new DatagramPacket(
@@ -71,10 +71,10 @@ public class Main {
 
             byte[] responseData = resolverResponsePacket.getData();
 
-            // ✅ Debugging: Print hex response
+            // Debugging: Print hex response
             System.out.println("Final response (hex): " + bytesToHex(responseData));
 
-            // ✅ Extract and print the IPv4 address from the response (last 4 bytes)
+            // Extract and print the IPv4 address from the response (last 4 bytes)
             int lastIndex = responseData.length - 4;
             if (lastIndex >= 0) {
                 System.out.println("IPv4 Address from resolver: " +
