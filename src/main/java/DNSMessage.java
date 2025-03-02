@@ -93,8 +93,18 @@ public class DNSMessage {
         if (answerSectionSize > 0) {
             byte[] answerData = new byte[answerSectionSize];
             resolverBuffer.get(answerData, 0, answerSectionSize);
-            responseBuffer.put(answerData);
+
+            // Only copy non-zero bytes to avoid unnecessary padding
+            int lastNonZeroIndex = answerData.length - 1;
+            while (lastNonZeroIndex > 0 && answerData[lastNonZeroIndex] == 0) {
+                lastNonZeroIndex--;
+            }
+
+            byte[] trimmedAnswerData = new byte[lastNonZeroIndex + 1];
+            System.arraycopy(answerData, 0, trimmedAnswerData, 0, trimmedAnswerData.length);
+            responseBuffer.put(trimmedAnswerData);
         }
+
 
         // Ensure response doesn't exceed 512 bytes
         if (responseBuffer.position() > MAX_UDP_SIZE) {
@@ -114,8 +124,19 @@ public class DNSMessage {
         responseBuffer.rewind();
         responseBuffer.get(response, 0, response.length);
 
-        System.out.println("[Debug] First 20 Bytes of Response: " + java.util.Arrays.toString(java.util.Arrays.copyOf(response, 20)));
+        // Trim extra padding if response is exactly 512 bytes (potential issue)
+        if (response.length == MAX_UDP_SIZE) {
+            int lastNonZeroIndex = response.length - 1;
+            while (lastNonZeroIndex > HEADER_SIZE && response[lastNonZeroIndex] == 0) {
+                lastNonZeroIndex--;
+            }
+            byte[] trimmedResponse = new byte[lastNonZeroIndex + 1];
+            System.arraycopy(response, 0, trimmedResponse, 0, trimmedResponse.length);
+            response = trimmedResponse;
+        }
 
+        System.out.println("[Debug] Final Trimmed Response Size: " + response.length);
+        System.out.println("[Debug] First 50 Bytes of Trimmed Response: " + java.util.Arrays.toString(java.util.Arrays.copyOf(response, Math.min(50, response.length))));
         return response;
     }
 }
