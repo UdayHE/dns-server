@@ -95,7 +95,6 @@ public class DNSMessage {
             responseBuffer.put(questionBytes);
         }
 
-
         // Copy resolver answer section (ensuring no truncation)
         int answerSectionSize = Math.min(resolverBuffer.remaining(), responseBuffer.remaining());
         if (answerSectionSize > 0) {
@@ -105,7 +104,9 @@ public class DNSMessage {
             // Extract record type to check for A records, and validate rdata length
             ByteBuffer answerBuffer = ByteBuffer.wrap(answerData);
             int nameOffset = answerBuffer.position();
-            if(answerData.length >= nameOffset + 12) { //check to ensure that array is long enough to read
+
+            // Check to ensure that array is long enough to read
+            if(answerData.length >= nameOffset + 12) {
                 short type = answerBuffer.getShort(nameOffset + 2);
                 if (type == 1) { // Type 1 = A Record
                     short rdLength = answerBuffer.getShort(nameOffset + 10);
@@ -115,20 +116,16 @@ public class DNSMessage {
                 }
             }
             responseBuffer.put(answerData);
-
         }
 
         // Ensure response doesn't exceed 512 bytes, set truncation flag if truncated by proxy or resolver
         if (responseBuffer.position() > MAX_UDP_SIZE || ((responseFlags & 0x0200) == 0x0200)) {
-
             System.out.println("[Warning] Response exceeded 512 bytes, setting truncation flag.");
 
             short flags = responseBuffer.getShort(2); //Get flags
             flags |= 0x0200;  //Set Truncation bit
             responseBuffer.putShort(2, flags);  //Put flags back.
-
         }
-
 
         // Debugging Output
         System.out.println("[Debug] Response Size: " + responseBuffer.position());
@@ -144,6 +141,7 @@ public class DNSMessage {
 
         return response;
     }
+
 
 
 }
