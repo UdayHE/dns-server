@@ -67,50 +67,53 @@ public class DNSMessage {
 
         System.out.println("ANCOUNT: " + anCount + ", NSCOUNT: " + nsCount + ", ARCOUNT: " + arCount);
 
-        // Skip the question section
+        // Ensure buffer has enough data for the question section
         int questionSectionSize = request.questionSections.stream().mapToInt(q -> q.length + 4).sum();
+        if (resolverBuffer.remaining() < questionSectionSize) {
+            System.out.println("⚠ Error: Resolver response too short for question section.");
+            return resolverResponse; // Return original response if parsing fails
+        }
+
+        // Move buffer position to the answer section
         resolverBuffer.position(12 + questionSectionSize);
 
         List<byte[]> answers = new ArrayList<>();
-        if (anCount > 0) {
-            for (int i = 0; i < anCount; i++) {
-                int answerStart = resolverBuffer.position();
-
-                // Skip the name field (assuming it's compressed)
-                resolverBuffer.getShort();
-
-                short answerType = resolverBuffer.getShort();
-                short answerClass = resolverBuffer.getShort();
-                int ttl = resolverBuffer.getInt();
-                short dataLength = resolverBuffer.getShort();
-
-                if (answerType == 1 && dataLength == 4) { // IPv4 address
-                    byte[] ipv4Address = new byte[4];
-                    resolverBuffer.get(ipv4Address);
-                    System.out.println("✅ Extracted IPv4 Address: " +
-                            (ipv4Address[0] & 0xFF) + "." + (ipv4Address[1] & 0xFF) + "." +
-                            (ipv4Address[2] & 0xFF) + "." + (ipv4Address[3] & 0xFF));
-
-                    // Construct the answer section
-                    ByteBuffer answerBuffer = ByteBuffer.allocate(16); // 12 bytes for header + 4 bytes for IPv4
-                    answerBuffer.putShort((short) 0xC00C); // Compressed name pointer to the question section
-                    answerBuffer.putShort(answerType);
-                    answerBuffer.putShort(answerClass);
-                    answerBuffer.putInt(ttl);
-                    answerBuffer.putShort(dataLength);
-                    answerBuffer.put(ipv4Address);
-
-                    answers.add(answerBuffer.array());
-                } else {
-                    // Skip non-A records or invalid data lengths
-                    resolverBuffer.position(resolverBuffer.position() + dataLength);
-                }
+        for (int i = 0; i < anCount; i++) {
+            int remainingBytes = resolverBuffer.remaining();
+            if (remainingBytes < 12) {
+                System.out.println("❌ Not enough bytes left for answer section!");
+                break;
             }
-        } else {
-            System.out.println("⚠ No answers in resolver response.");
+
+            int answerStart = resolverBuffer.position();
+            byte[] nameField = new byte[2];
+            resolverBuffer.get(nameField);
+
+            short answerType = resolverBuffer.getShort();
+            short answerClass = resolverBuffer.getShort();
+            int ttl = resolverBuffer.getInt();
+            short dataLength = resolverBuffer.getShort();
+
+            if (resolverBuffer.remaining() < dataLength) {
+                System.out.println("❌ Error: Not enough bytes left for answer data!");
+                break;
+            }
+
+            byte[] answerData = new byte[dataLength];
+            resolverBuffer.get(answerData);
+
+            if (answerType == 1 && dataLength == 4) { // IPv4
+                System.out.println("✅ Extracted IPv4 Address: " +
+                        (answerData[0] & 0xFF) + "." + (answerData[1] & 0xFF) + "." +
+                        (answerData[2] & 0xFF) + "." + (answerData[3] & 0xFF));
+            }
+
+            ByteBuffer answerBuffer = ByteBuffer.allocate(resolverBuffer.position() - answerStart);
+            resolverBuffer.position(answerStart);
+            resolverBuffer.get(answerBuffer.array());
+            answers.add(answerBuffer.array());
         }
 
-        // Construct the final response
         int responseSize = 12 + questionSectionSize + answers.stream().mapToInt(a -> a.length).sum();
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
@@ -121,20 +124,19 @@ public class DNSMessage {
         responseBuffer.putShort(nsCount);
         responseBuffer.putShort(arCount);
 
-        // Add the question section
         for (byte[] question : request.questionSections) {
             responseBuffer.put(question);
-            responseBuffer.putShort((short) 1); // Type A
-            responseBuffer.putShort((short) 1); // Class IN
+            responseBuffer.putShort((short) 1);
+            responseBuffer.putShort((short) 1);
         }
 
-        // Add the answer section
         for (byte[] answer : answers) {
             responseBuffer.put(answer);
         }
 
         return responseBuffer.array();
     }
+
 
     private static List<Byte> byteArrayToList(byte[] array) {
         List<Byte> list = new ArrayList<>();
