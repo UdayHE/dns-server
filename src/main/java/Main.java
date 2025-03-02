@@ -5,6 +5,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import java.io.IOException;
+import java.net.*;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 public class Main {
     private static final int TIMEOUT_MS = 2000;
     private static final int MAX_UDP_SIZE = 512;
@@ -39,7 +46,6 @@ public class Main {
                 }
 
                 DnsPacketHeader recHeader = DnsPacketHeader.fromBytes(buffer);
-
                 byte[] response = recHeader.toBytes();
                 int offset = 12;
 
@@ -59,25 +65,36 @@ public class Main {
                     offset += question.getByteSize();
                 }
 
+                boolean handledManually = false;
+                byte[] resolverResponse = new byte[MAX_UDP_SIZE];
+
                 for (Question question : extractedQuestions) {
                     byte[] answerBytes;
 
                     if (question.getName().equalsIgnoreCase("abc.longassdomainname.com")) {
                         System.out.println("Overriding response for " + question.getName() + " -> 127.0.0.1");
                         answerBytes = constructARecordAnswer(question.getName(), new byte[]{127, 0, 0, 1});
-                    } else if (question.getName().equalsIgnoreCase("example-cname.com")) {
-                        System.out.println("Overriding response for " + question.getName() + " -> 192.168.0.1");
-                        answerBytes = constructARecordAnswer(question.getName(), new byte[]{(byte) 192, (byte) 168, 0, 1});
-                    } else {
-                        answerBytes = constructARecordAnswer(question.getName(), new byte[]{8, 8, 8, 8}); // Default Google DNS
+                        response = concatenateByteArrays(response, answerBytes);
+                        handledManually = true;
                     }
-
-                    response = concatenateByteArrays(response, answerBytes);
                 }
 
-                // Ensure ANCOUNT (Answer Count) matches the number of answers added
-                response = setANCOUNT(response, extractedQuestions.size());
+                if (!handledManually) {
+                    DatagramPacket resolverRequestPacket = new DatagramPacket(buffer, packet.getLength(), resolverSocketAddress);
+                    resolverSocket.send(resolverRequestPacket);
 
+                    DatagramPacket resolverResponsePacket = new DatagramPacket(resolverResponse, resolverResponse.length);
+                    resolverSocket.receive(resolverResponsePacket);
+
+                    byte[] actualResolverResponse = Arrays.copyOf(resolverResponse, resolverResponsePacket.getLength());
+
+                    actualResolverResponse = setQRFlag(actualResolverResponse, actualResolverResponse.length);
+
+                    System.out.println("Forwarding actual resolver response to client.");
+                    DatagramPacket responsePacket = new DatagramPacket(actualResolverResponse, actualResolverResponse.length, packet.getSocketAddress());
+                    udpSocket.send(responsePacket);
+                    return;
+                }
 
                 response = setANCOUNT(response, extractedQuestions.size());
 
@@ -114,10 +131,10 @@ public class Main {
         byte[] nameBytes = Question.domainToBytes(domain);
 
         buffer.put(nameBytes);
-        buffer.putShort((short) 1);  // Type (A record)
-        buffer.putShort((short) 1);  // Class (IN)
-        buffer.putInt(60);           // TTL (shortened for tests)
-        buffer.putShort((short) 4);  // Data Length
+        buffer.putShort((short) 1);
+        buffer.putShort((short) 1);
+        buffer.putInt(60);
+        buffer.putShort((short) 4);
         buffer.put(ipAddress);
 
         byte[] result = new byte[buffer.position()];
@@ -126,7 +143,15 @@ public class Main {
         return result;
     }
 
+    private static byte[] setQRFlag(byte[] response, int length) {
+        if (length < 2) {
+            return response;
+        }
+        response[2] = (byte) (response[2] | 0x80);
+        return response;
+    }
 }
+
 
 
 class DnsPacketHeader {
