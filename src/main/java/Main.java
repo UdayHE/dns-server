@@ -59,8 +59,9 @@ public class Main {
                 );
 
                 byte[] resolverRequest = reqHeaderResolver.toBytes();
-                int offset = 12;  // Initial offset after DNS header
+                int offset = 12;  // Start after the DNS header
 
+                List<Question> extractedQuestions = new ArrayList<>();
                 for (int i = 0; i < recHeader.getQuestionCount(); i++) {
                     List<Question> questionList = Question.fromBytes(1, buffer, offset);
                     if (questionList.isEmpty()) {
@@ -69,11 +70,16 @@ public class Main {
                     }
 
                     Question question = questionList.get(0);
+                    extractedQuestions.add(question);
+
                     resolverRequest = concatenateByteArrays(resolverRequest, question.toBytes());
 
-                    // Correctly calculate the offset:
-                    offset += question.getByteSize(); // ✅ This method needs to be implemented
+                    // Move offset properly (use domain compression if needed)
+                    offset += question.getByteSize();
                 }
+
+                System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
+
 
 
                 System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
@@ -139,7 +145,7 @@ public class Main {
         return new InetSocketAddress(ip, port);
     }
 
-    private static String bytesToHex(byte[] bytes, int length) {
+    static String bytesToHex(byte[] bytes, int length) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < length; i++) {
             sb.append(String.format("%02X", bytes[i]));
@@ -286,16 +292,24 @@ class Question {
     private static byte[] domainToBytes(String domain) {
         ByteBuffer buffer = ByteBuffer.allocate(512);
         String[] labels = domain.split("\\.");
+        int position = 0;
+
         for (String label : labels) {
+            if (label.isEmpty()) continue;  // Skip empty labels
             buffer.put((byte) label.length());
             buffer.put(label.getBytes(StandardCharsets.UTF_8));
+            position += label.length() + 1;
         }
-        buffer.put((byte) 0);
+
+        buffer.put((byte) 0); // NULL terminator
         byte[] result = new byte[buffer.position()];
         buffer.flip();
         buffer.get(result);
+
+        System.out.println("Encoded Domain: " + domain + " -> " + Main.bytesToHex(result, result.length));
         return result;
     }
+
 
     private static String bytesToName(byte[] bytes, int offset) {
         StringBuilder name = new StringBuilder();
