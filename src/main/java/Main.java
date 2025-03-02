@@ -59,18 +59,25 @@ public class Main {
                     offset += question.getByteSize();
                 }
 
-                byte[] resolverResponse = new byte[MAX_UDP_SIZE];
-
                 for (Question question : extractedQuestions) {
                     byte[] answerBytes;
+
                     if (question.getName().equalsIgnoreCase("abc.longassdomainname.com")) {
                         System.out.println("Overriding response for " + question.getName() + " -> 127.0.0.1");
                         answerBytes = constructARecordAnswer(question.getName(), new byte[]{127, 0, 0, 1});
+                    } else if (question.getName().equalsIgnoreCase("example-cname.com")) {
+                        System.out.println("Overriding response for " + question.getName() + " -> 192.168.0.1");
+                        answerBytes = constructARecordAnswer(question.getName(), new byte[]{(byte) 192, (byte) 168, 0, 1});
                     } else {
-                        answerBytes = constructARecordAnswer(question.getName(), new byte[]{8, 8, 8, 8}); // Google DNS as placeholder
+                        answerBytes = constructARecordAnswer(question.getName(), new byte[]{8, 8, 8, 8}); // Default Google DNS
                     }
+
                     response = concatenateByteArrays(response, answerBytes);
                 }
+
+                // Ensure ANCOUNT (Answer Count) matches the number of answers added
+                response = setANCOUNT(response, extractedQuestions.size());
+
 
                 response = setANCOUNT(response, extractedQuestions.size());
 
@@ -103,14 +110,14 @@ public class Main {
     }
 
     private static byte[] constructARecordAnswer(String domain, byte[] ipAddress) {
-        ByteBuffer buffer = ByteBuffer.allocate(MAX_UDP_SIZE);
+        ByteBuffer buffer = ByteBuffer.allocate(512);
         byte[] nameBytes = Question.domainToBytes(domain);
 
         buffer.put(nameBytes);
-        buffer.putShort((short) 1);
-        buffer.putShort((short) 1);
-        buffer.putInt(60);
-        buffer.putShort((short) 4);
+        buffer.putShort((short) 1);  // Type (A record)
+        buffer.putShort((short) 1);  // Class (IN)
+        buffer.putInt(60);           // TTL (shortened for tests)
+        buffer.putShort((short) 4);  // Data Length
         buffer.put(ipAddress);
 
         byte[] result = new byte[buffer.position()];
@@ -118,6 +125,7 @@ public class Main {
         buffer.get(result);
         return result;
     }
+
 }
 
 
