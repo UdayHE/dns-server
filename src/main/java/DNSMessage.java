@@ -70,7 +70,10 @@ public class DNSMessage {
         short nsCount = resolverBuffer.getShort();
         short arCount = resolverBuffer.getShort();
 
-        ByteBuffer responseBuffer = ByteBuffer.allocate(512);
+        int estimatedSize = resolverResponse.length + 100;  // Ensure buffer is larger
+        if (estimatedSize > 512) estimatedSize = 512;  // Truncate oversized responses
+
+        ByteBuffer responseBuffer = ByteBuffer.allocate(estimatedSize);
         responseBuffer.putShort(transactionId); // Maintain the original ID
         responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
@@ -80,13 +83,15 @@ public class DNSMessage {
 
         // Copy question section from original request
         for (Question question : questions) {
-            responseBuffer.put(question.toBytes());
+            byte[] questionBytes = question.toBytes();
+            if (responseBuffer.remaining() < questionBytes.length) break; // Prevent overflow
+            responseBuffer.put(questionBytes);
         }
 
         // Copy answer section from resolver (ensure all answers are included)
         int remainingBytes = resolverBuffer.remaining();
         if (remainingBytes > 0) {
-            byte[] answerData = new byte[remainingBytes];
+            byte[] answerData = new byte[Math.min(remainingBytes, responseBuffer.remaining())]; // Prevent overflow
             resolverBuffer.get(answerData);
             responseBuffer.put(answerData);
         }

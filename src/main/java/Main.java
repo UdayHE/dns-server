@@ -31,25 +31,30 @@ public class Main {
             byte[] buffer = new byte[BUFFER_SIZE];
 
             while (true) {
-                DatagramPacket clientPacket = new DatagramPacket(buffer, BUFFER_SIZE);
-                serverSocket.receive(clientPacket);
-                System.out.println("Received DNS request from " + clientPacket.getSocketAddress());
+                try {
+                    DatagramPacket clientPacket = new DatagramPacket(buffer, BUFFER_SIZE);
+                    serverSocket.receive(clientPacket);
+                    System.out.println("Received DNS request from " + clientPacket.getSocketAddress());
 
-                // Parse DNS request
-                DNSMessage requestMessage = new DNSMessage(clientPacket.getData());
+                    // Parse DNS request
+                    DNSMessage requestMessage = new DNSMessage(clientPacket.getData());
 
-                // Forward the query and get the response
-                byte[] resolverResponse = forwardQuery(clientPacket.getData());
+                    // Forward the query and get the response
+                    byte[] resolverResponse = forwardQuery(clientPacket.getData());
 
-                // Create a proper response with the correct transaction ID
-                DNSMessage responseMessage = new DNSMessage(resolverResponse);
-                byte[] response = responseMessage.createResponse(resolverResponse);
+                    // Create a proper response with the correct transaction ID
+                    DNSMessage responseMessage = new DNSMessage(resolverResponse);
+                    byte[] response = responseMessage.createResponse(resolverResponse);
 
-                // Send response back to the client
-                DatagramPacket responsePacket = new DatagramPacket(
-                        response, response.length, clientPacket.getSocketAddress());
-                serverSocket.send(responsePacket);
-                System.out.println("Forwarded response to client.");
+                    // Send response back to the client
+                    DatagramPacket responsePacket = new DatagramPacket(
+                            response, response.length, clientPacket.getSocketAddress());
+                    serverSocket.send(responsePacket);
+                    System.out.println("Forwarded response to client.");
+                } catch (Exception e) {
+                    System.err.println("Error processing DNS request: " + e.getMessage());
+                    e.printStackTrace();
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
