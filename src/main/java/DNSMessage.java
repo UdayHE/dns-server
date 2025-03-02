@@ -18,7 +18,7 @@ public class DNSMessage {
         buffer.getShort(); // NSCOUNT
         buffer.getShort(); // ARCOUNT
 
-        // Extract question section (Domain name + QTYPE + QCLASS)
+        // Extract question section (Variable-length domain name)
         int index = 12; // Start after the header
         while (data[index] != 0) { index++; } // Domain name ends with 0x00
         index += 5; // Move past null byte + QTYPE (2 bytes) + QCLASS (2 bytes)
@@ -28,7 +28,10 @@ public class DNSMessage {
     }
 
     public static byte[] createResponse(DNSMessage request) {
-        int responseSize = 12 + request.questionSection.length + 16; // Header + Question + Answer (16 bytes)
+        int questionLength = request.questionSection.length;
+        int answerLength = questionLength + 10 + 4; // Name + Type + Class + TTL + Length + IP
+        int responseSize = 12 + questionLength + answerLength;
+
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
         responseBuffer.putShort((short) 1234); // Transaction ID
@@ -40,7 +43,7 @@ public class DNSMessage {
 
         responseBuffer.put(request.questionSection);
 
-        responseBuffer.put(request.questionSection); // Name (use the same as in the question)
+        responseBuffer.put(request.questionSection); // Name (Same as question)
         responseBuffer.putShort((short) 1); // Type (A)
         responseBuffer.putShort((short) 1); // Class (IN)
         responseBuffer.putInt(60); // TTL (60 seconds)
