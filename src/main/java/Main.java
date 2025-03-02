@@ -32,7 +32,7 @@ public class Main {
                 if (resolverAddress != null) {
                     responseData = handleForwarding(receivePacket.getData(), resolverAddress, serverSocket);
                 } else {
-                    responseData = handleDnsQuery(receivePacket.getData());
+                    responseData = buildDnsResponse(parseDnsQuery(receivePacket.getData()));
                 }
 
                 if (responseData != null) {
@@ -44,6 +44,43 @@ public class Main {
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
+    }
+
+    static byte[] buildDnsResponse(DNSMessage dnsMessage) {
+        ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
+
+        // DNS Header
+        buffer.putShort(dnsMessage.id);
+        buffer.putShort((short) 0x8180); // Response, no error
+        buffer.putShort((short) dnsMessage.questions.size()); // Question count
+        buffer.putShort((short) dnsMessage.questions.size()); // Answer count
+        buffer.putShort((short) 0); // Authority count
+        buffer.putShort((short) 0); // Additional count
+
+        // Question Section: Uncompressed
+        for (Question question : dnsMessage.questions) {
+            writeDomainName(buffer, question.qName);
+            buffer.putShort(question.qType);
+            buffer.putShort(question.qClass);
+        }
+
+        // Answer Section
+        for (Question question : dnsMessage.questions) {
+            writeDomainName(buffer, question.qName);
+            buffer.putShort((short) 1);  // Type A
+            buffer.putShort((short) 1);  // Class IN
+            buffer.putInt(3600); // TTL
+            buffer.putShort((short) 4);  // RDLENGTH (IPv4)
+            buffer.put((byte) 8);  // Example IP: 8.8.8.8
+            buffer.put((byte) 8);
+            buffer.put((byte) 8);
+            buffer.put((byte) 8);
+        }
+
+        buffer.flip();
+        byte[] response = new byte[buffer.remaining()];
+        buffer.get(response);
+        return response;
     }
 
     static byte[] handleForwarding(byte[] requestData, String resolverAddress, DatagramSocket socket) {
@@ -80,11 +117,9 @@ public class Main {
         InetSocketAddress resolverSocketAddress = new InetSocketAddress(host, port);
         DatagramPacket requestPacket = new DatagramPacket(requestData, requestData.length, resolverSocketAddress);
 
-        // Send the request to the resolver
         socket.send(requestPacket);
         System.out.println("Forwarded query to resolver at " + resolverAddress);
 
-        // Receive the response from the resolver
         byte[] responseBuffer = new byte[512];
         DatagramPacket responsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
         socket.receive(responsePacket);
@@ -93,14 +128,15 @@ public class Main {
         return Arrays.copyOfRange(responsePacket.getData(), 0, responsePacket.getLength());
     }
 
+
     static byte[] buildSingleQuestionQuery(short id, Question question) {
         ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
         buffer.putShort(id);
-        buffer.putShort((short) 0x0100); // Standard query with recursion
-        buffer.putShort((short) 1); // 1 Question
-        buffer.putShort((short) 0); // 0 Answer
-        buffer.putShort((short) 0); // 0 Authority
-        buffer.putShort((short) 0); // 0 Additional
+        buffer.putShort((short) 0x0100);
+        buffer.putShort((short) 1);
+        buffer.putShort((short) 0);
+        buffer.putShort((short) 0);
+        buffer.putShort((short) 0);
         writeDomainName(buffer, question.qName);
         buffer.putShort(question.qType);
         buffer.putShort(question.qClass);
@@ -113,15 +149,15 @@ public class Main {
     static byte[] mergeResponses(short id, List<byte[]> responses) {
         ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
         buffer.putShort(id);
-        buffer.putShort((short) 0x8180); // Response, no error
-        buffer.putShort((short) responses.size()); // Number of questions
-        buffer.putShort((short) responses.size()); // Number of answers
-        buffer.putShort((short) 0); // 0 Authority
-        buffer.putShort((short) 0); // 0 Additional
+        buffer.putShort((short) 0x8180);
+        buffer.putShort((short) responses.size());
+        buffer.putShort((short) responses.size());
+        buffer.putShort((short) 0);
+        buffer.putShort((short) 0);
 
         for (byte[] response : responses) {
             ByteBuffer responseBuffer = ByteBuffer.wrap(response);
-            responseBuffer.position(12); // Skip the header
+            responseBuffer.position(12);
             while (responseBuffer.hasRemaining()) {
                 buffer.put(responseBuffer.get());
             }
@@ -137,7 +173,7 @@ public class Main {
         DNSMessage dnsMessage = new DNSMessage();
         ByteBuffer buffer = ByteBuffer.wrap(request).order(ByteOrder.BIG_ENDIAN);
         dnsMessage.id = buffer.getShort();
-        buffer.getShort(); // Skip flags
+        buffer.getShort();
         dnsMessage.qdCount = buffer.getShort();
         dnsMessage.anCount = buffer.getShort();
         dnsMessage.nsCount = buffer.getShort();
