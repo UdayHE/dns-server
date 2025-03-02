@@ -58,70 +58,75 @@ public class DNSMessage {
     public static byte[] createResponse(DNSMessage request, byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
-        // Extract Transaction ID and Flags from the resolver response
+        // Extract Transaction ID and Flags from resolver response
         short transactionId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
 
         // Extract QDCOUNT and ANCOUNT
         short qdCount = resolverBuffer.getShort();
         short anCount = resolverBuffer.getShort();
-        resolverBuffer.getShort(); // NSCOUNT (skip)
-        resolverBuffer.getShort(); // ARCOUNT (skip)
+        short nsCount = resolverBuffer.getShort();
+        short arCount = resolverBuffer.getShort();
 
         // Skip the question section
         int questionSectionSize = request.questionSections.stream().mapToInt(q -> q.length + 4).sum();
         resolverBuffer.position(12 + questionSectionSize);
 
-        // Extract the Answer Section (Correct Offset Handling)
-        byte[] namePointer = new byte[request.questionSections.get(0).length]; // Name field in answer
-        resolverBuffer.get(namePointer);
-        short answerType = resolverBuffer.getShort();
-        short answerClass = resolverBuffer.getShort();
-        int ttl = resolverBuffer.getInt();
-        short dataLength = resolverBuffer.getShort();
+        // Extract the Answer Section
+        List<byte[]> answers = new ArrayList<>();
+        for (int i = 0; i < anCount; i++) {
+            int answerStart = resolverBuffer.position();  // Track the answer section start
 
-        byte[] ipAddress = new byte[4];
-        if (answerType == 1 && dataLength == 4) { // Ensure it's an IPv4 response
-            resolverBuffer.get(ipAddress);
-        } else {
-            ipAddress = new byte[]{0, 0, 0, 0}; // Fallback if no valid IPv4 found
+            // Copy full answer record (Name, Type, Class, TTL, Data Length, IP Address)
+            byte[] namePointer = new byte[2];
+            resolverBuffer.get(namePointer);
+            short answerType = resolverBuffer.getShort();
+            short answerClass = resolverBuffer.getShort();
+            int ttl = resolverBuffer.getInt();
+            short dataLength = resolverBuffer.getShort();
+            byte[] answerData = new byte[dataLength];
+            resolverBuffer.get(answerData);
+
+            // Debug: Print extracted Answer IP
+            if (answerType == 1 && dataLength == 4) { // IPv4 Only
+                System.out.println("Extracted IPv4 Address: " +
+                        (answerData[0] & 0xFF) + "." + (answerData[1] & 0xFF) + "." +
+                        (answerData[2] & 0xFF) + "." + (answerData[3] & 0xFF));
+            }
+
+            // Store full answer
+            ByteBuffer answerBuffer = ByteBuffer.allocate(resolverBuffer.position() - answerStart);
+            resolverBuffer.position(answerStart);
+            resolverBuffer.get(answerBuffer.array());
+            answers.add(answerBuffer.array());
         }
 
-        // Debugging: Print the extracted IPv4 address
-        System.out.println("Extracted IPv4 Address: " +
-                (ipAddress[0] & 0xFF) + "." + (ipAddress[1] & 0xFF) + "." +
-                (ipAddress[2] & 0xFF) + "." + (ipAddress[3] & 0xFF));
-
-        // Calculate response size correctly
-        int responseSize = 12 + questionSectionSize + (namePointer.length + 16);
+        // Correctly Allocate Response Buffer
+        int responseSize = 12 + questionSectionSize + answers.stream().mapToInt(a -> a.length).sum();
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
-        responseBuffer.putShort(transactionId); // Copy ID from resolver response
-        responseBuffer.putShort(responseFlags); // Copy Flags from resolver response
+        responseBuffer.putShort(transactionId); // Copy ID
+        responseBuffer.putShort(responseFlags); // Copy Flags
 
-        responseBuffer.putShort(qdCount); // QDCOUNT (number of questions)
-        responseBuffer.putShort(anCount); // ANCOUNT (number of answers)
-        responseBuffer.putShort((short) 0); // NSCOUNT
-        responseBuffer.putShort((short) 0); // ARCOUNT
+        responseBuffer.putShort(qdCount); // QDCOUNT
+        responseBuffer.putShort((short) answers.size()); // Correct ANCOUNT
+        responseBuffer.putShort(nsCount); // Copy NSCOUNT
+        responseBuffer.putShort(arCount); // Copy ARCOUNT
 
-        // Add the question section back
+        // Add the Question Section
         for (byte[] question : request.questionSections) {
             responseBuffer.put(question);
             responseBuffer.putShort((short) 1); // Type (A)
             responseBuffer.putShort((short) 1); // Class (IN)
         }
 
-        // Add the Answer Section
-        responseBuffer.put(namePointer); // Name (Pointer or Uncompressed)
-        responseBuffer.putShort(answerType); // Type (A)
-        responseBuffer.putShort(answerClass); // Class (IN)
-        responseBuffer.putInt(ttl); // TTL (Copied from resolver)
-        responseBuffer.putShort((short) 4); // Length (IPv4 address size)
-        responseBuffer.put(ipAddress); // Correct IPv4 address from resolver response
+        // Add the Correct Answer Section
+        for (byte[] answer : answers) {
+            responseBuffer.put(answer);
+        }
 
         return responseBuffer.array();
     }
-
 
     private static List<Byte> byteArrayToList(byte[] array) {
         List<Byte> list = new ArrayList<>();
