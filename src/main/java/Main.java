@@ -83,7 +83,7 @@ public class Main {
                     byte[] questionBytes;
                     if (firstDomainOffset == -1) {
                         questionBytes = question.toBytes(); // First domain encoded fully
-                        firstDomainOffset = offset;
+                        firstDomainOffset = resolverRequest.length; // Save the correct offset AFTER encoding
                     } else {
                         questionBytes = question.toBytesUsingCompression(firstDomainOffset);
                     }
@@ -95,6 +95,7 @@ public class Main {
                     // Move offset correctly
                     offset += questionBytes.length;
                 }
+
 
 
 
@@ -308,6 +309,11 @@ class Question {
 
     public byte[] toBytesUsingCompression(int offset) {
         ByteBuffer buffer = ByteBuffer.allocate(512);
+
+        if (offset < 0 || offset > 255) {
+            throw new IllegalArgumentException("Invalid offset for compression pointer: " + offset);
+        }
+
         buffer.put((byte) 0xC0);  // Compression pointer
         buffer.put((byte) offset); // Points to first occurrence of domain
 
@@ -321,6 +327,7 @@ class Question {
         System.out.println("Compressed Question: " + name + " -> " + Main.bytesToHex(result, result.length));
         return result;
     }
+
 
 
     public static List<Question> fromBytes(int count, byte[] bytes, int offset) {
