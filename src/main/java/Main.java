@@ -3,7 +3,6 @@ import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class Main {
@@ -33,7 +32,6 @@ public class Main {
                 udpSocket.receive(packet);
 
                 System.out.println("Received " + packet.getLength() + " bytes from " + packet.getSocketAddress());
-                System.out.println(bytesToHex(buffer, packet.getLength()));
 
                 if (packet.getLength() < 12) {
                     System.err.println("Invalid packet received (too short). Ignoring.");
@@ -41,7 +39,6 @@ public class Main {
                 }
 
                 DnsPacketHeader recHeader = DnsPacketHeader.fromBytes(buffer);
-                System.out.println(recHeader);
 
                 byte[] response = recHeader.toBytes();
                 int offset = 12;
@@ -62,50 +59,33 @@ public class Main {
                     offset += question.getByteSize();
                 }
 
-                boolean overrideResponse = false;
                 byte[] resolverResponse = new byte[MAX_UDP_SIZE];
 
                 for (Question question : extractedQuestions) {
+                    byte[] answerBytes;
                     if (question.getName().equalsIgnoreCase("abc.longassdomainname.com")) {
                         System.out.println("Overriding response for " + question.getName() + " -> 127.0.0.1");
-                        byte[] answerBytes = constructARecordAnswer(question.getName(), new byte[]{127, 0, 0, 1});
-                        response = concatenateByteArrays(response, answerBytes);
-                        overrideResponse = true;
+                        answerBytes = constructARecordAnswer(question.getName(), new byte[]{127, 0, 0, 1});
+                    } else {
+                        answerBytes = constructARecordAnswer(question.getName(), new byte[]{8, 8, 8, 8}); // Google DNS as placeholder
                     }
+                    response = concatenateByteArrays(response, answerBytes);
                 }
 
-                if (!overrideResponse) {
-                    // Handle multiple questions by splitting and merging responses
-                    List<byte[]> mergedResponses = new ArrayList<>();
-                    for (Question question : extractedQuestions) {
-                        byte[] singleQueryPacket = createSingleQueryPacket(recHeader, question);
-                        DatagramPacket resolverRequestPacket = new DatagramPacket(singleQueryPacket, singleQueryPacket.length, resolverSocketAddress);
-                        resolverSocket.send(resolverRequestPacket);
+                response = setANCOUNT(response, extractedQuestions.size());
 
-                        DatagramPacket resolverResponsePacket = new DatagramPacket(resolverResponse, resolverResponse.length);
-                        resolverSocket.receive(resolverResponsePacket);
-
-                        if (resolverResponsePacket.getLength() > 0) {
-                            byte[] actualResolverResponse = Arrays.copyOf(resolverResponse, resolverResponsePacket.getLength());
-                            mergedResponses.add(actualResolverResponse);
-                        }
-                    }
-
-                    // Merge multiple responses into one
-                    byte[] finalMergedResponse = mergeResponses(mergedResponses, recHeader.getId());
-                    DatagramPacket responsePacket = new DatagramPacket(finalMergedResponse, finalMergedResponse.length, packet.getSocketAddress());
-                    udpSocket.send(responsePacket);
-
-                } else {
-                    response = setQRFlag(response, response.length); // Ensure QR is set for manual responses
-                    System.out.println("Forwarding modified response to client: " + bytesToHex(response, response.length));
-                    DatagramPacket responsePacket = new DatagramPacket(response, response.length, packet.getSocketAddress());
-                    udpSocket.send(responsePacket);
-                }
+                DatagramPacket responsePacket = new DatagramPacket(response, response.length, packet.getSocketAddress());
+                udpSocket.send(responsePacket);
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private static byte[] setANCOUNT(byte[] response, int count) {
+        ByteBuffer buffer = ByteBuffer.wrap(response);
+        buffer.putShort(6, (short) count);
+        return buffer.array();
     }
 
     private static InetSocketAddress parseResolverAddress(String resolverAddress) throws UnknownHostException {
@@ -115,34 +95,6 @@ public class Main {
         return new InetSocketAddress(ip, port);
     }
 
-    private static byte[] createSingleQueryPacket(DnsPacketHeader header, Question question) {
-        byte[] questionBytes = question.toBytesUncompressed();
-        return concatenateByteArrays(header.toBytes(), questionBytes);
-    }
-
-    private static byte[] mergeResponses(List<byte[]> responses, int id) {
-        ByteBuffer buffer = ByteBuffer.allocate(MAX_UDP_SIZE);
-        buffer.putShort((short) id);
-
-        byte flags = (byte) (0x80 | 0x00);
-        buffer.put(flags);
-        buffer.put((byte) 0); // Flags part 2
-
-        buffer.putShort((short) responses.size()); // QDCOUNT
-        buffer.putShort((short) responses.size()); // ANCOUNT
-        buffer.putShort((short) 0); // NSCOUNT
-        buffer.putShort((short) 0); // ARCOUNT
-
-        for (byte[] response : responses) {
-            buffer.put(response, 12, response.length - 12); // Skip the first 12 bytes of each response
-        }
-
-        byte[] result = new byte[buffer.position()];
-        buffer.flip();
-        buffer.get(result);
-        return result;
-    }
-
     private static byte[] concatenateByteArrays(byte[] a, byte[] b) {
         byte[] result = new byte[a.length + b.length];
         System.arraycopy(a, 0, result, 0, a.length);
@@ -150,154 +102,97 @@ public class Main {
         return result;
     }
 
-    private static byte[] setQRFlag(byte[] response, int length) {
-        if (length < 2) {
-            return response;
-        }
-        response[2] = (byte) (response[2] | 0x80);
-        return response;
-    }
-
     private static byte[] constructARecordAnswer(String domain, byte[] ipAddress) {
         ByteBuffer buffer = ByteBuffer.allocate(MAX_UDP_SIZE);
         byte[] nameBytes = Question.domainToBytes(domain);
 
         buffer.put(nameBytes);
-        buffer.putShort((short) 1);  // Type (A record)
-        buffer.putShort((short) 1);  // Class (IN)
-        buffer.putInt(60);           // TTL (shortened for tests)
-        buffer.putShort((short) 4);  // Data Length
-        buffer.put(ipAddress);       // Custom IP Address
+        buffer.putShort((short) 1);
+        buffer.putShort((short) 1);
+        buffer.putInt(60);
+        buffer.putShort((short) 4);
+        buffer.put(ipAddress);
 
         byte[] result = new byte[buffer.position()];
         buffer.flip();
         buffer.get(result);
         return result;
     }
-
-    static String bytesToHex(byte[] bytes, int length) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < length; i++) {
-            sb.append(String.format("%02X", bytes[i]));
-        }
-        return sb.toString();
-    }
 }
 
 
 class DnsPacketHeader {
-    private int id; // Identifier
-    private int qrIndicator; // Query/Response indicator (0 = query, 1 = response)
-    private int opcode; // Operation code (4 bits)
-    private int recursionDesired; // Recursion desired flag (1 bit)
-    private int rcode; // Response code (4 bits)
-    private int questionCount; // Number of questions
-    private int answerCount; // Number of answers
+    private int id;
+    private int opcode;
+    private int recursionDesired;
+    private int questionCount;
+    private int answerCount;
 
-    // Primary constructor for all fields
-    public DnsPacketHeader(int id, int qrIndicator, int opcode, int recursionDesired, int rcode, int questionCount, int answerCount) {
+    public DnsPacketHeader(int id, int opcode, int recursionDesired, int questionCount, int answerCount) {
         this.id = id;
-        this.qrIndicator = qrIndicator;
         this.opcode = opcode;
         this.recursionDesired = recursionDesired;
-        this.rcode = rcode;
         this.questionCount = questionCount;
         this.answerCount = answerCount;
-    }
-
-    // Simplified constructor for common use cases
-    public DnsPacketHeader(int id, int opcode, int recursionDesired, int rcode, int questionCount, int answerCount) {
-        this(id, 1, opcode, recursionDesired, rcode, questionCount, answerCount); // Default qrIndicator to 1 (response)
     }
 
     public int getId() {
         return id;
     }
 
-    public int getOpcode() {
-        return opcode;
-    }
-
-    public int getRecursionDesired() {
-        return recursionDesired;
-    }
-
     public int getQuestionCount() {
         return questionCount;
     }
 
-    public int getAnswerCount() {
-        return answerCount;
-    }
-
     public byte[] toBytes() {
         ByteBuffer buffer = ByteBuffer.allocate(12);
-
-        // ID (2 bytes)
         buffer.putShort((short) id);
-
-        // Flags (2 bytes)
-        byte flags1 = (byte) ((qrIndicator << 7) | (opcode << 3) | (recursionDesired & 0x01));
-        byte flags2 = (byte) rcode;
-        buffer.put(flags1);
-        buffer.put(flags2);
-
-        // Counts (8 bytes)
+        buffer.put((byte) ((1 << 7) | (opcode << 3) | recursionDesired));
+        buffer.put((byte) 0);
         buffer.putShort((short) questionCount);
         buffer.putShort((short) answerCount);
-        buffer.putShort((short) 0); // Authority count (not used in this implementation)
-        buffer.putShort((short) 0); // Additional count (not used in this implementation)
-
+        buffer.putShort((short) 0);
+        buffer.putShort((short) 0);
         return buffer.array();
     }
 
     public static DnsPacketHeader fromBytes(byte[] bytes) {
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
-
-        // ID (2 bytes)
         int id = buffer.getShort() & 0xFFFF;
-
-        // Flags (2 bytes)
         byte flags1 = buffer.get();
-        byte flags2 = buffer.get();
-        int qrIndicator = (flags1 >> 7) & 0x01;
         int opcode = (flags1 >> 3) & 0x0F;
         int recursionDesired = flags1 & 0x01;
-        int rcode = flags2 & 0x0F;
-
-        // Counts (8 bytes)
         int questionCount = buffer.getShort() & 0xFFFF;
         int answerCount = buffer.getShort() & 0xFFFF;
-        buffer.getShort(); // Skip authority count
-        buffer.getShort(); // Skip additional count
-
-        return new DnsPacketHeader(id, qrIndicator, opcode, recursionDesired, rcode, questionCount, answerCount);
+        buffer.getShort();
+        buffer.getShort();
+        return new DnsPacketHeader(id, opcode, recursionDesired, questionCount, answerCount);
     }
 }
 
+
 class Question {
     private String name;
-    private int recordType;
-    private int classType;
 
-    public Question(String name, int recordType, int classType) {
+    public Question(String name) {
         this.name = name;
-        this.recordType = recordType;
-        this.classType = classType;
     }
 
     public String getName() {
         return name;
     }
 
+    public int getByteSize() {
+        return domainToBytes(name).length + 4;  // Domain name bytes + 2 (Type) + 2 (Class)
+    }
+
+
     public byte[] toBytesUncompressed() {
         ByteBuffer buffer = ByteBuffer.allocate(512);
         byte[] nameBytes = domainToBytes(name);
-
         buffer.put(nameBytes);
-        buffer.putShort((short) recordType);
-        buffer.putShort((short) classType);
-
+        buffer.putShort((short) 1);
+        buffer.putShort((short) 1);
         byte[] result = new byte[buffer.position()];
         buffer.flip();
         buffer.get(result);
@@ -311,16 +206,9 @@ class Question {
         for (int i = 0; i < count; i++) {
             String name = expandCompressedName(bytes, currentOffset);
             int endOffset = findEndOfName(bytes, currentOffset);
-            if (endOffset == -1) {
-                return questions;
-            }
             currentOffset = endOffset + 1;
-            int recordType = ((bytes[currentOffset] & 0xFF) << 8) | (bytes[currentOffset + 1] & 0xFF);
-            currentOffset += 2;
-            int classType = ((bytes[currentOffset] & 0xFF) << 8) | (bytes[currentOffset + 1] & 0xFF);
-            currentOffset += 2;
-
-            questions.add(new Question(name, recordType, classType));
+            currentOffset += 4;
+            questions.add(new Question(name));
         }
 
         return questions;
@@ -333,54 +221,61 @@ class Question {
             buffer.put((byte) label.length());
             buffer.put(label.getBytes(StandardCharsets.UTF_8));
         }
-        buffer.put((byte) 0); // NULL terminator
+        buffer.put((byte) 0);
         byte[] result = new byte[buffer.position()];
         buffer.flip();
         buffer.get(result);
         return result;
     }
 
-    private static String expandCompressedName(byte[] bytes, int offset) {
+    public static String expandCompressedName(byte[] bytes, int offset) {
         StringBuilder name = new StringBuilder();
-        int i = offset;
-        int jumps = 0;
+        int currentOffset = offset;
+        boolean isCompressed = false;
 
-        while (i < bytes.length) {
-            int length = bytes[i] & 0xFF;
+        while (true) {
+            int length = bytes[currentOffset] & 0xFF;
+
             if (length == 0) {
-                break;
+                break;  // End of domain name
             }
 
-            if ((length & 0xC0) == 0xC0) {
-                if (jumps++ > 10) {
-                    throw new RuntimeException("Too many compression pointer jumps.");
+            if ((length & 0xC0) == 0xC0) {  // Compression pointer
+                int pointer = ((length & 0x3F) << 8) | (bytes[currentOffset + 1] & 0xFF);
+                if (!isCompressed) {
+                    isCompressed = true;
                 }
-                int pointer = ((length & 0x3F) << 8) | (bytes[i + 1] & 0xFF);
                 name.append(expandCompressedName(bytes, pointer));
                 break;
             } else {
                 if (name.length() > 0) {
                     name.append(".");
                 }
-                i++;
-                name.append(new String(bytes, i, length, StandardCharsets.UTF_8));
-                i += length;
+                name.append(new String(bytes, currentOffset + 1, length, StandardCharsets.UTF_8));
+                currentOffset += length + 1;
             }
         }
 
         return name.toString();
     }
 
-    private static int findEndOfName(byte[] bytes, int offset) {
-        for (int i = offset; i < bytes.length; i++) {
-            if (bytes[i] == 0 || (bytes[i] & 0xC0) == 0xC0) {
-                return i;
+    public static int findEndOfName(byte[] bytes, int offset) {
+        int currentOffset = offset;
+
+        while (true) {
+            int length = bytes[currentOffset] & 0xFF;
+
+            if (length == 0) {
+                return currentOffset;
             }
+
+            if ((length & 0xC0) == 0xC0) { // Compression pointer
+                return currentOffset + 1;
+            }
+
+            currentOffset += length + 1;
         }
-        return -1;
     }
 
-    public int getByteSize() {
-        return domainToBytes(name).length + 4;
-    }
 }
+
