@@ -39,6 +39,8 @@ public class DNSMessage {
 
     private String parseDomainName(ByteBuffer buffer, byte[] data) {
         StringBuilder domainName = new StringBuilder();
+        int initialPosition = buffer.position(); // Track position to detect compression loops
+
         while (true) {
             int length = buffer.get() & 0xFF;
             if (length == 0) break;
@@ -46,6 +48,10 @@ public class DNSMessage {
             // Handle name compression (first two bits set to 11)
             if ((length & 0xC0) == 0xC0) {
                 int pointer = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
+                if (pointer >= initialPosition) {
+                    System.err.println("[Error] Detected invalid name compression pointer: " + pointer);
+                    return ""; // Prevent infinite loops in case of a bad compression pointer
+                }
                 return parseDomainName(ByteBuffer.wrap(data, pointer, data.length - pointer), data);
             }
 
@@ -56,6 +62,7 @@ public class DNSMessage {
         }
         return domainName.toString();
     }
+
 
     public byte[] createResponse(byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
@@ -68,18 +75,27 @@ public class DNSMessage {
         short nsCount = resolverBuffer.getShort();
         short arCount = resolverBuffer.getShort();
 
+
         // Allocate buffer dynamically
         int responseSize = Math.min(resolverResponse.length, MAX_UDP_SIZE);
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
 
         // Ensure transaction ID matches original request
-        responseBuffer.putShort(transactionId); // Set the correct transaction ID
+        responseBuffer.putShort(0, transactionId); // Overwrite transaction ID to ensure it matches the request
+
         responseBuffer.putShort(responseFlags);
-        responseBuffer.putShort(qdCount);
-        responseBuffer.putShort(anCount);
-        responseBuffer.putShort(nsCount);
-        responseBuffer.putShort(arCount);
+//        responseBuffer.putShort(qdCount);
+//        responseBuffer.putShort(anCount);
+//        responseBuffer.putShort(nsCount);
+//        responseBuffer.putShort(arCount);
+
+        // Set proper counts to prevent mismatches
+        responseBuffer.putShort(4, (short) questions.size()); // Question count
+        responseBuffer.putShort(6,  answerCount);      // Answer count
+        responseBuffer.putShort(8, (short) 0); // Authority count (force zero)
+        responseBuffer.putShort(10, (short) 0); // Additional count (force zero)
+
 
         // Copy original question section (avoid mismatches)
         for (Question question : questions) {
