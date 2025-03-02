@@ -100,26 +100,30 @@ public class Main {
             resolverSocket.receive(resolverResponsePacket);
 
             byte[] responseData = resolverResponsePacket.getData();
-
             ByteBuffer responseWrapper = ByteBuffer.wrap(responseData);
+
+            // Extract Transaction ID and Flags
             short transactionId = responseWrapper.getShort();
             short flags = responseWrapper.getShort();
 
             System.out.println("Received response ID: " + transactionId);
             System.out.println("Received response flags (before modification): " + Integer.toBinaryString(flags));
 
-            flags |= (1 << 15); // Ensure QR bit is set to 1 (response)
+            // Explicitly ensure QR bit is set (bit 15)
+            flags = (short) (flags | 0x8000); // 0x8000 = 1000000000000000 (sets bit 15)
 
             System.out.println("Modified response flags (after setting QR): " + Integer.toBinaryString(flags));
 
+            // Construct a new response with modified QR bit
             ByteBuffer modifiedResponse = ByteBuffer.allocate(responseData.length);
             modifiedResponse.putShort(transactionId);
             modifiedResponse.putShort(flags);
-            modifiedResponse.put(responseData, 4, responseData.length - 4); // Copy the rest of the response
+            modifiedResponse.put(responseData, 4, responseData.length - 4); // Copy rest of the response
 
             return modifiedResponse.array();
         }
     }
+
 
     /**
      * Extracts a single question from the original query.
