@@ -3,6 +3,7 @@ import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class Main {
@@ -61,10 +62,15 @@ public class Main {
                     offset += question.getByteSize();
                 }
 
-                for (Question question : extractedQuestions) {
-                    byte[] answerBytes = constructARecordAnswer(question.getName());
-                    response = concatenateByteArrays(response, answerBytes);
+                if (response.length > 0) {
+                    byte[] resolverResponse = Arrays.copyOf(response, response.length);
+                    byte[] modifiedResponse = setQRFlag(resolverResponse, response.length);
+
+                    System.out.println("Forwarding actual resolver response to client: " + bytesToHex(modifiedResponse, modifiedResponse.length));
+                    DatagramPacket responsePacket = new DatagramPacket(modifiedResponse, modifiedResponse.length, packet.getSocketAddress());
+                    udpSocket.send(responsePacket);
                 }
+
 
                 // Modify the header to ensure QR = 1 (Response)
                 byte[] modifiedResponse = setQRFlag(response, response.length);
@@ -113,22 +119,6 @@ public class Main {
         return result;
     }
 
-    private static byte[] constructARecordAnswer(String domain) {
-        ByteBuffer buffer = ByteBuffer.allocate(512);
-        byte[] nameBytes = Question.domainToBytes(domain);
-
-        buffer.put(nameBytes);
-        buffer.putShort((short) 1);  // Type (A record)
-        buffer.putShort((short) 1);  // Class (IN)
-        buffer.putInt(3600);         // TTL (3600 seconds)
-        buffer.putShort((short) 4);  // Data Length (4 bytes for IPv4)
-        buffer.put(new byte[]{(byte) 192, (byte) 168, 1, 1});
-
-        byte[] result = new byte[buffer.position()];
-        buffer.flip();
-        buffer.get(result);
-        return result;
-    }
 }
 
 
