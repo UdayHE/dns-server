@@ -87,9 +87,14 @@ public class DNSMessage {
 
                 int answerStart = resolverBuffer.position();  // Track the answer section start
 
-                // Copy full answer record (Name, Type, Class, TTL, Data Length, IP Address)
-                byte[] namePointer = new byte[2];
-                resolverBuffer.get(namePointer);
+                // Read Name (Handling Compression)
+                byte[] nameField = new byte[2];
+                resolverBuffer.get(nameField);
+                if ((nameField[0] & 0xC0) == 0xC0) {
+                    int pointer = ((nameField[0] & 0x3F) << 8) | (nameField[1] & 0xFF);
+                    System.out.println("📌 Compressed Name Pointer: " + pointer);
+                }
+
                 short answerType = resolverBuffer.getShort();
                 short answerClass = resolverBuffer.getShort();
                 int ttl = resolverBuffer.getInt();
