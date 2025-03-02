@@ -4,11 +4,6 @@ import java.util.Arrays;
 public class DNSMessage {
     private final byte[] rawData;
     private final short transactionId;
-    private final short flags;
-    private final short questionCount;
-    private final short answerCount;
-    private final short authorityCount;
-    private final short additionalCount;
     private final byte[] questionSection;
     private final int questionEndIndex;
 
@@ -17,14 +12,14 @@ public class DNSMessage {
         ByteBuffer buffer = ByteBuffer.wrap(data);
 
         this.transactionId = buffer.getShort();  // ID
-        this.flags = buffer.getShort();         // Flags
-        this.questionCount = buffer.getShort(); // QDCOUNT
-        this.answerCount = buffer.getShort();   // ANCOUNT
-        this.authorityCount = buffer.getShort(); // NSCOUNT
-        this.additionalCount = buffer.getShort(); // ARCOUNT
+        buffer.getShort(); // Flags
+        buffer.getShort(); // QDCOUNT
+        buffer.getShort(); // ANCOUNT
+        buffer.getShort(); // NSCOUNT
+        buffer.getShort(); // ARCOUNT
 
-        // Extract question section
-        int index = 12; // Start after header
+        // Extract question section (Domain name + QTYPE + QCLASS)
+        int index = 12; // Start after the header
         while (data[index] != 0) { index++; } // Domain name ends with 0x00
         index += 5; // Move past null byte + QTYPE (2 bytes) + QCLASS (2 bytes)
         this.questionEndIndex = index;
@@ -33,7 +28,7 @@ public class DNSMessage {
     }
 
     public static byte[] createResponse(DNSMessage request) {
-        int responseSize = request.questionEndIndex + 16;
+        int responseSize = 12 + request.questionSection.length + 16; // Header + Question + Answer (16 bytes)
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
         responseBuffer.putShort((short) 1234); // Transaction ID
@@ -43,10 +38,9 @@ public class DNSMessage {
         responseBuffer.putShort((short) 0); // NSCOUNT
         responseBuffer.putShort((short) 0); // ARCOUNT
 
-
         responseBuffer.put(request.questionSection);
 
-        responseBuffer.put(request.questionSection); // Name (use same format from question)
+        responseBuffer.put(request.questionSection); // Name (use the same as in the question)
         responseBuffer.putShort((short) 1); // Type (A)
         responseBuffer.putShort((short) 1); // Class (IN)
         responseBuffer.putInt(60); // TTL (60 seconds)
