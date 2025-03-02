@@ -101,17 +101,21 @@ public class Main {
 
             byte[] responseData = resolverResponsePacket.getData();
 
-            // Ensure QR bit is set in the actual byte array
-            responseData[2] = (byte) (responseData[2] | 0x80); // Set bit 15 (QR bit)
+            //Debug: Print original flags before modification
+            System.out.println("Original flags byte: " + Integer.toBinaryString(responseData[2] & 0xFF) + " " + Integer.toBinaryString(responseData[3] & 0xFF));
+
+            // Ensure QR bit is set
+            responseData[2] |= (byte) 0x80;  // Set QR bit in the flags field
 
             // Debug: Confirm changes before sending
+            System.out.println("Modified flags byte: " + Integer.toBinaryString(responseData[2] & 0xFF) + " " + Integer.toBinaryString(responseData[3] & 0xFF));
             System.out.println("Final response (hex): " + bytesToHex(responseData));
 
             return responseData;
         }
     }
 
-    //  Helper function to print bytes as hex
+    // Helper function to print bytes as hex
     private static String bytesToHex(byte[] bytes) {
         StringBuilder sb = new StringBuilder();
         for (byte b : bytes) {
@@ -119,9 +123,6 @@ public class Main {
         }
         return sb.toString();
     }
-
-
-
 
     /**
      * Extracts a single question from the original query.
