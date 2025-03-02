@@ -13,6 +13,7 @@ public class Main {
     private static String resolverAddress = null;
 
     public static void main(String[] args) {
+        // Parse command-line arguments
         if (args.length > 0 && args[0].equals("--resolver")) {
             resolverAddress = args[1];
         }
@@ -187,14 +188,21 @@ public class Main {
         int questionStart = 12; // Header size
         requestBuffer.position(questionStart);
 
+        // Store the positions of the questions to use later for constructing the answer section.
+        List<Integer> questionPositions = new ArrayList<>();
+
         for (Question question : dnsMessage.questions) {
+            questionPositions.add(buffer.position());  //Store start position for each question.
             writeDomainName(buffer, question.qName);
-            buffer.putShort((short) 1);  // Type A
-            buffer.putShort((short) 1);  // Class IN
+            buffer.putShort((short) question.qType);  // Type
+            buffer.putShort((short) question.qClass);  // Class
         }
 
+
         // Answer Section
-        for (Question question : dnsMessage.questions) {
+        for (int i = 0; i < dnsMessage.questions.size(); i++) {
+            Question question = dnsMessage.questions.get(i);
+
             writeDomainName(buffer, question.qName); // Name
             buffer.putShort((short) 1); // Type A
             buffer.putShort((short) 1); // Class IN
