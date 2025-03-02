@@ -1,48 +1,80 @@
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class Main {
 
-    private static final int DNS_PORT = 2053;
+    private static String resolverAddress = null;
 
     public static void main(String[] args) {
-        try (DatagramSocket serverSocket = new DatagramSocket(DNS_PORT)) {
-            System.out.println("DNS server listening on port " + DNS_PORT);
+        if (args.length > 1 && args[0].equals("--resolver")) {
+            resolverAddress = args[1];
+        }
+
+        try (DatagramSocket serverSocket = new DatagramSocket(2053)) {
+            System.out.println("DNS server listening on port 2053");
 
             while (true) {
                 byte[] receiveBuf = new byte[512];
                 DatagramPacket receivePacket = new DatagramPacket(receiveBuf, receiveBuf.length);
                 serverSocket.receive(receivePacket);
-
                 System.out.println("Received packet from: " + receivePacket.getSocketAddress());
 
-                byte[] responseData = handleDnsQuery(receivePacket.getData());
+                byte[] responseData;
 
-                DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length, receivePacket.getSocketAddress());
-                serverSocket.send(responsePacket);
+                if (resolverAddress != null) {
+                    responseData = handleForwarding(receivePacket.getData(), resolverAddress, serverSocket);
+                } else {
+                    responseData = handleDnsQuery(receivePacket.getData());
+                }
 
-                System.out.println("Sent response to: " + receivePacket.getSocketAddress());
+                if (responseData != null) {
+                    DatagramPacket responsePacket = new DatagramPacket(responseData, responseData.length, receivePacket.getSocketAddress());
+                    serverSocket.send(responsePacket);
+                    System.out.println("Sent response to: " + receivePacket.getSocketAddress());
+                }
             }
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
         }
     }
 
+    static byte[] handleForwarding(byte[] requestData, String resolverAddress, DatagramSocket socket) {
+        try {
+            String[] parts = resolverAddress.split(":");
+            String host = parts[0];
+            int port = Integer.parseInt(parts[1]);
+
+            InetSocketAddress resolverSocketAddress = new InetSocketAddress(host, port);
+            DatagramPacket request = new DatagramPacket(requestData, requestData.length, resolverSocketAddress);
+
+            socket.send(request);
+            byte[] responseBuffer = new byte[512];
+            DatagramPacket response = new DatagramPacket(responseBuffer, responseBuffer.length);
+            socket.receive(response);
+
+            return Arrays.copyOfRange(response.getData(), 0, response.getLength());
+        } catch (IOException e) {
+            System.err.println("Error forwarding DNS query: " + e.getMessage());
+            return null;
+        }
+    }
+
     static byte[] handleDnsQuery(byte[] request) {
         DNSMessage dnsMessage = parseDnsQuery(request);
-        return buildDnsResponse(dnsMessage);
+        return buildDnsResponse(dnsMessage, request);
     }
 
     static DNSMessage parseDnsQuery(byte[] request) {
         DNSMessage dnsMessage = new DNSMessage();
         ByteBuffer buffer = ByteBuffer.wrap(request).order(ByteOrder.BIG_ENDIAN);
 
-        // Parse Header
         dnsMessage.id = buffer.getShort();
         short flags = buffer.getShort();
         dnsMessage.qr = (flags >> 15) & 1;
@@ -53,7 +85,6 @@ public class Main {
         dnsMessage.nsCount = buffer.getShort();
         dnsMessage.arCount = buffer.getShort();
 
-        // Parse Questions (handling compression)
         for (int i = 0; i < dnsMessage.qdCount; i++) {
             Question question = new Question();
             question.qName = parseDomainName(buffer, request);
@@ -71,7 +102,7 @@ public class Main {
         int originalPos = buffer.position();
 
         while ((length = buffer.get() & 0xFF) != 0) {
-            if ((length & 0xC0) == 0xC0) { // Check for compression
+            if ((length & 0xC0) == 0xC0) {
                 int offset = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
                 return parseCompressedName(request, offset);
             } else {
@@ -108,35 +139,31 @@ public class Main {
         return domainName.toString();
     }
 
-    static byte[] buildDnsResponse(DNSMessage dnsMessage) {
+    static byte[] buildDnsResponse(DNSMessage dnsMessage, byte[] request) {
         ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
-
-        // Header
         buffer.putShort(dnsMessage.id);
-        buffer.putShort((short) 0x8180); // Standard response, no error
+        buffer.putShort((short) 0x8180); // QR=1, RD=1, RA=1, RCODE=0
         buffer.putShort((short) dnsMessage.questions.size());
-        buffer.putShort((short) dnsMessage.questions.size()); // Answers match the number of questions
-        buffer.putShort((short) 0);
-        buffer.putShort((short) 0);
+        buffer.putShort((short) dnsMessage.questions.size()); // ANCOUNT
+        buffer.putShort((short) 0); // NSCOUNT
+        buffer.putShort((short) 0); // ARCOUNT
 
-        // Question Section: Uncompressed domain names
         for (Question question : dnsMessage.questions) {
             writeDomainName(buffer, question.qName);
             buffer.putShort(question.qType);
             buffer.putShort(question.qClass);
         }
 
-        // Answer Section
         for (Question question : dnsMessage.questions) {
             writeDomainName(buffer, question.qName);
-            buffer.putShort((short) 1);  // Type A
-            buffer.putShort((short) 1);  // Class IN
+            buffer.putShort((short) 1); // TYPE A
+            buffer.putShort((short) 1); // CLASS IN
             buffer.putInt(3600); // TTL
-            buffer.putShort((short) 4);  // RDLENGTH (IPv4)
-            buffer.put((byte) 127);  // Example IP: 127.0.0.2
+            buffer.putShort((short) 4); // RDLENGTH
+            buffer.put((byte) 127); // RDATA (IP address)
             buffer.put((byte) 0);
             buffer.put((byte) 0);
-            buffer.put((byte) 2);
+            buffer.put((byte) 1);
         }
 
         buffer.flip();
@@ -152,7 +179,7 @@ public class Main {
                 buffer.put((byte) c);
             }
         }
-        buffer.put((byte) 0); // Null terminator
+        buffer.put((byte) 0);
     }
 
     static class DNSMessage {
