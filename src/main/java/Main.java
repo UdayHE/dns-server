@@ -6,9 +6,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
+    private static final int MAX_RETRIES = 3;
+    private static final int TIMEOUT_MS = 2000;
 
     public static void main(String[] args) {
-        if (args.length < 1) {
+        if (args.length < 2 || !args[0].equals("--resolver")) {
             System.out.println("Usage: java Main --resolver <resolver_ip:port>");
             return;
         }
@@ -22,7 +24,8 @@ public class Main {
 
             InetSocketAddress resolverSocketAddress = parseResolverAddress(resolverAddress);
             DatagramSocket resolverSocket = new DatagramSocket();
-            resolverSocket.setSoTimeout(2000); // Set timeout for resolver
+            resolverSocket.connect(resolverSocketAddress);
+            resolverSocket.setSoTimeout(TIMEOUT_MS);
 
             while (true) {
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -32,102 +35,97 @@ public class Main {
                 System.out.println(bytesToHex(buffer, packet.getLength()));
 
                 if (packet.getSocketAddress().equals(resolverSocketAddress)) {
-                    System.out.println("Got data from resolver!");
+                    System.out.println("Got data from resolver! Ignoring self-response.");
                     continue;
                 }
 
                 if (packet.getLength() < 12) {
+                    System.err.println("Invalid packet received (too short). Ignoring.");
                     continue;
                 }
 
                 DnsPacketHeader recHeader = DnsPacketHeader.fromBytes(buffer);
                 System.out.println(recHeader);
 
-                DnsPacketHeader responseHeader = new DnsPacketHeader(
-                        recHeader.getId(),
-                        1, // QR indicator (response)
-                        recHeader.getOpcode(),
-                        recHeader.getRecursionDesired(),
-                        recHeader.getOpcode() == 0 ? 0 : 4, // Response code
-                        recHeader.getQuestionCount(),
-                        recHeader.getQuestionCount() // Answer count
-                );
-
-                byte[] response = responseHeader.toBytes();
-
+                // Build request header for resolver
                 DnsPacketHeader reqHeaderResolver = new DnsPacketHeader(
                         recHeader.getId(),
+                        0, // QR (0 = query)
                         recHeader.getOpcode(),
                         recHeader.getRecursionDesired(),
-                        recHeader.getOpcode() == 0 ? 0 : 4, // rcode
+                        0, // Response code (default to NOERROR)
                         recHeader.getQuestionCount(),
-                        0 // answerCount (query)
+                        0  // Initially no answers
                 );
 
-                if (packet.getLength() > 12 && recHeader.getOpcode() == 0) {
-                    List<Question> questions = Question.fromBytes(recHeader.getQuestionCount(), buffer, 12);
-                    List<byte[]> answers = new ArrayList<>();
+                byte[] resolverRequest = reqHeaderResolver.toBytes();
+                int offset = 12;  // Initial offset after DNS header
 
-                    for (Question question : questions) {
-                        byte[] questionBytes = question.toBytes();
-                        response = concatenateByteArrays(response, questionBytes);
-
-                        byte[] reqForResolver = concatenateByteArrays(reqHeaderResolver.toBytes(), questionBytes);
-                        System.out.println("Sending to resolver: " + bytesToHex(reqForResolver, reqForResolver.length));
-
-                        DatagramPacket resolverPacket = new DatagramPacket(reqForResolver, reqForResolver.length, resolverSocketAddress);
-                        resolverSocket.send(resolverPacket);
-
-                        byte[] resolverBuffer = new byte[512];
-                        DatagramPacket resolverResponsePacket = new DatagramPacket(resolverBuffer, resolverBuffer.length);
-                        try {
-                            resolverSocket.receive(resolverResponsePacket);
-                            System.out.println("Got " + resolverResponsePacket.getLength() + " bytes from resolver " + resolverResponsePacket.getSocketAddress());
-                            byte[] answerRaw = new byte[resolverResponsePacket.getLength() - reqForResolver.length];
-                            System.arraycopy(resolverBuffer, reqForResolver.length, answerRaw, 0, answerRaw.length);
-                            answers.add(answerRaw);
-                        } catch (SocketTimeoutException e) {
-                            System.err.println("Timeout waiting for resolver response");
-                            // Set response code to SERVFAIL (2)
-                            responseHeader = new DnsPacketHeader(
-                                    recHeader.getId(),
-                                    1, // QR indicator (response)
-                                    recHeader.getOpcode(),
-                                    recHeader.getRecursionDesired(),
-                                    2, // rcode (SERVFAIL)
-                                    recHeader.getQuestionCount(),
-                                    0 // answerCount
-                            );
-                            response = responseHeader.toBytes();
-                            break; // Exit the loop and send the response
-                        }
+                for (int i = 0; i < recHeader.getQuestionCount(); i++) {
+                    List<Question> questionList = Question.fromBytes(1, buffer, offset);
+                    if (questionList.isEmpty()) {
+                        System.err.println("Failed to parse question at offset " + offset);
+                        break;
                     }
 
-                    if (!answers.isEmpty()) {
-                        // Rebuild the response with the updated header and answers
-                        responseHeader = new DnsPacketHeader(
-                                recHeader.getId(),
-                                1, // QR indicator (response)
-                                recHeader.getOpcode(),
-                                recHeader.getRecursionDesired(),
-                                0, // rcode (NOERROR)
-                                recHeader.getQuestionCount(),
-                                answers.size() // answerCount
-                        );
-                        response = responseHeader.toBytes();
-                        for (Question question : questions) {
-                            response = concatenateByteArrays(response, question.toBytes());
-                        }
-                        for (byte[] answer : answers) {
-                            response = concatenateByteArrays(response, answer);
-                        }
+                    Question question = questionList.get(0);
+                    resolverRequest = concatenateByteArrays(resolverRequest, question.toBytes());
+
+                    // Correctly calculate the offset:
+                    offset += question.getByteSize(); // ✅ This method needs to be implemented
+                }
+
+
+                System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
+
+                DatagramPacket resolverPacket = new DatagramPacket(resolverRequest, resolverRequest.length, resolverSocketAddress);
+                resolverSocket.send(resolverPacket);
+
+                byte[] resolverBuffer = new byte[512];
+                DatagramPacket resolverResponsePacket = new DatagramPacket(resolverBuffer, resolverBuffer.length);
+
+                boolean gotResponse = false;
+                for (int i = 0; i < MAX_RETRIES; i++) {
+                    try {
+                        resolverSocket.receive(resolverResponsePacket);
+                        gotResponse = true;
+                        System.out.println("Got " + resolverResponsePacket.getLength() + " bytes from resolver " + resolverResponsePacket.getSocketAddress());
+                        break;
+                    } catch (SocketTimeoutException e) {
+                        System.err.println("Timeout waiting for resolver response, retrying... (" + (i + 1) + "/" + MAX_RETRIES + ")");
                     }
                 }
 
-                System.out.println("Sending response: " + bytesToHex(response, response.length));
-                DatagramPacket responsePacket = new DatagramPacket(response, response.length, packet.getSocketAddress());
+                if (!gotResponse) {
+                    System.err.println("Resolver did not respond after " + MAX_RETRIES + " retries. Sending SERVFAIL.");
+                    DnsPacketHeader failResponseHeader = new DnsPacketHeader(
+                            recHeader.getId(), 1, recHeader.getOpcode(), recHeader.getRecursionDesired(), 2, // SERVFAIL
+                            recHeader.getQuestionCount(), 0 // No answers
+                    );
+                    byte[] failResponse = failResponseHeader.toBytes();
+
+                    // Extract the questions **before** using them
+                    List<Question> questions = new ArrayList<>();
+                    for (int i = 0; i < recHeader.getQuestionCount(); i++) {
+                        List<Question> questionList = Question.fromBytes(1, buffer, offset);
+                        if (!questionList.isEmpty()) {
+                            Question question = questionList.get(0);
+                            questions.add(question);
+                            failResponse = concatenateByteArrays(failResponse, question.toBytes());
+                            offset += question.getByteSize();
+                        }
+                    }
+
+                    DatagramPacket responsePacket = new DatagramPacket(failResponse, failResponse.length, packet.getSocketAddress());
+                    udpSocket.send(responsePacket);
+                    continue;
+                }
+
+
+                // Send valid response back to client
+                System.out.println("Forwarding response to client: " + bytesToHex(resolverBuffer, resolverResponsePacket.getLength()));
+                DatagramPacket responsePacket = new DatagramPacket(resolverBuffer, resolverResponsePacket.getLength(), packet.getSocketAddress());
                 udpSocket.send(responsePacket);
-                System.out.println("Response sent to client: " + bytesToHex(response, response.length));
             }
         } catch (IOException e) {
             e.printStackTrace();
