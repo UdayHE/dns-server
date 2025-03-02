@@ -66,13 +66,29 @@ public class Main {
                     response = concatenateByteArrays(response, answerBytes);
                 }
 
-                System.out.println("Forwarding response to client: " + bytesToHex(response, response.length));
-                DatagramPacket responsePacket = new DatagramPacket(response, response.length, packet.getSocketAddress());
+                // Modify the header to ensure QR = 1 (Response)
+                byte[] modifiedResponse = setQRFlag(response, response.length);
+
+                System.out.println("Forwarding modified response to client: " + bytesToHex(modifiedResponse, modifiedResponse.length));
+                DatagramPacket responsePacket = new DatagramPacket(modifiedResponse, modifiedResponse.length, packet.getSocketAddress());
                 udpSocket.send(responsePacket);
+
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+
+    private static byte[] setQRFlag(byte[] response, int length) {
+        if (length < 2) {
+            return response; // Safety check to ensure the packet is not malformed
+        }
+
+        // Set QR flag (bit 7 of first byte)
+        response[2] = (byte) (response[2] | 0x80);
+
+        return response;
     }
 
     private static InetSocketAddress parseResolverAddress(String resolverAddress) throws UnknownHostException {
