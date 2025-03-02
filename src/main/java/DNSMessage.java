@@ -41,19 +41,16 @@ public class DNSMessage {
 
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
-        // 🔹 Header Section (12 bytes)
-        responseBuffer.putShort(request.transactionId); // ✅ Copy ID from request
+        responseBuffer.putShort(request.transactionId);
         short responseFlags = (short) (0x8000 | (request.opcode << 11) | (request.recursionDesired ? 0x0100 : 0) | request.responseCode);
-        responseBuffer.putShort(responseFlags); // ✅ Flags: QR=1, OPCODE mirrored, RD mirrored, RCODE set
-        responseBuffer.putShort((short) 1); // ✅ QDCOUNT (1 question)
-        responseBuffer.putShort((short) 1); // ✅ ANCOUNT (1 answer)
-        responseBuffer.putShort((short) 0); // NSCOUNT
-        responseBuffer.putShort((short) 0); // ARCOUNT
+        responseBuffer.putShort(responseFlags);
+        responseBuffer.putShort((short) 1);
+        responseBuffer.putShort((short) 1);
+        responseBuffer.putShort((short) 0);
+        responseBuffer.putShort((short) 0);
 
-        // 🔹 Question Section (Copy from request)
         responseBuffer.put(request.questionSection);
 
-        // 🔹 Answer Section (codecrafters.io -> 8.8.8.8)
         responseBuffer.put(request.questionSection); // Name (Use the same as in the question)
         responseBuffer.putShort((short) 1); // Type (A)
         responseBuffer.putShort((short) 1); // Class (IN)
