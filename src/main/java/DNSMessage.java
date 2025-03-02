@@ -58,11 +58,11 @@ public class DNSMessage {
     public static byte[] createResponse(DNSMessage request, byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
-        // Extract Transaction ID and Flags from resolver response
+        // Extract Transaction ID and Flags
         short transactionId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
 
-        // Extract QDCOUNT and ANCOUNT
+        // Extract QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT
         short qdCount = resolverBuffer.getShort();
         short anCount = resolverBuffer.getShort();
         short nsCount = resolverBuffer.getShort();
@@ -93,7 +93,7 @@ public class DNSMessage {
                 short answerType = resolverBuffer.getShort();
                 short answerClass = resolverBuffer.getShort();
                 int ttl = resolverBuffer.getInt();
-                short dataLength = resolverBuffer.getShort();
+                int dataLength = resolverBuffer.getShort() & 0xFFFF; // Convert unsigned
 
                 if (resolverBuffer.remaining() < dataLength) {
                     System.out.println("❌ Not enough bytes left for answer data! Expected: " + dataLength + ", Available: " + resolverBuffer.remaining());
