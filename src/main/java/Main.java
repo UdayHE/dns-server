@@ -78,7 +78,11 @@ public class Main {
                     Question question = questionList.get(0);
                     extractedQuestions.add(question);
 
-                    resolverRequest = concatenateByteArrays(resolverRequest, question.toBytes());
+                    byte[] questionBytes = question.toBytes();
+                    System.out.println("Appending Question: " + question.getName() + " -> " + Main.bytesToHex(questionBytes, questionBytes.length));
+
+                    resolverRequest = concatenateByteArrays(resolverRequest, questionBytes);
+
 
                     // Move offset properly
                     offset += question.getByteSize();
@@ -288,23 +292,43 @@ class Question {
         return result;
     }
 
-
-
-
     public static List<Question> fromBytes(int count, byte[] bytes, int offset) {
         List<Question> questions = new ArrayList<>();
-        int afterName = offset;
+        int currentOffset = offset;
+
         for (int i = 0; i < count; i++) {
-            String name = bytesToName(bytes, afterName);
-            afterName = findNullByte(bytes, afterName) + 1;
-            int recordType = ((bytes[afterName] & 0xFF) << 8) | (bytes[afterName + 1] & 0xFF);
-            afterName += 2;
-            int classType = ((bytes[afterName] & 0xFF) << 8) | (bytes[afterName + 1] & 0xFF);
-            afterName += 2;
+            String name = bytesToName(bytes, currentOffset);
+
+            // Find the end of the domain name
+            int endOffset = findNullByte(bytes, currentOffset);
+            if (endOffset == -1) {
+                System.err.println("ERROR: Malformed DNS query (missing null terminator for domain name).");
+                return questions;
+            }
+            currentOffset = endOffset + 1;  // Move past the null terminator
+
+            // Read Record Type (2 bytes)
+            if (currentOffset + 2 > bytes.length) {
+                System.err.println("ERROR: Unexpected end of packet while reading record type.");
+                return questions;
+            }
+            int recordType = ((bytes[currentOffset] & 0xFF) << 8) | (bytes[currentOffset + 1] & 0xFF);
+            currentOffset += 2;
+
+            // Read Class Type (2 bytes)
+            if (currentOffset + 2 > bytes.length) {
+                System.err.println("ERROR: Unexpected end of packet while reading class type.");
+                return questions;
+            }
+            int classType = ((bytes[currentOffset] & 0xFF) << 8) | (bytes[currentOffset + 1] & 0xFF);
+            currentOffset += 2;
+
             questions.add(new Question(name, recordType, classType));
         }
+
         return questions;
     }
+
 
     private static byte[] domainToBytes(String domain) {
         ByteBuffer buffer = ByteBuffer.allocate(512);
@@ -348,8 +372,6 @@ class Question {
         }
         return name.toString();
     }
-
-
 
 
     private static int findNullByte(byte[] bytes, int offset) {
