@@ -85,9 +85,24 @@ public class Main {public static void main(String[] args) {
             DatagramPacket resolverResponsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
             resolverSocket.receive(resolverResponsePacket);
 
-            return resolverResponsePacket.getData();
+            byte[] responseData = resolverResponsePacket.getData();
+
+            // ✅ Ensure the QR bit is set to 1 (response)
+            ByteBuffer responseBufferWrapper = ByteBuffer.wrap(responseData);
+            short transactionId = responseBufferWrapper.getShort();
+            short flags = responseBufferWrapper.getShort();
+
+            flags |= (1 << 15); // Set QR bit to 1 (response)
+
+            ByteBuffer updatedResponse = ByteBuffer.allocate(responseData.length);
+            updatedResponse.putShort(transactionId);
+            updatedResponse.putShort(flags);
+            updatedResponse.put(responseData, 4, responseData.length - 4); // Copy rest of the response
+
+            return updatedResponse.array();
         }
     }
+
 
     private static byte[] extractSingleQuestion(byte[] data, int offset) {
         int end = offset;
