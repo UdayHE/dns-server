@@ -65,8 +65,8 @@ public class Main {
 
             resolverSocket.send(resolverRequestPacket);
 
-            // Use a larger buffer to handle larger responses
-            byte[] responseBuffer = new byte[4096]; // Increased buffer size to 4096 bytes
+            // Increase buffer size to 4096 bytes to avoid truncation
+            byte[] responseBuffer = new byte[4096];
             DatagramPacket resolverResponsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
             resolverSocket.receive(resolverResponsePacket);
 
@@ -75,21 +75,20 @@ public class Main {
             // Debugging: Print hex response
             System.out.println("Final response (hex): " + bytesToHex(responseData));
 
-            // Extract and print the IPv4 address from the response (last 4 bytes)
-            int lastIndex = responseData.length - 4;
-            if (lastIndex >= 0) {
+            // Extract and print the IPv4 address
+            if (responseData.length >= 16) { // Ensure enough bytes exist
+                int lastIndex = responseData.length - 4;
                 System.out.println("IPv4 Address from resolver: " +
                         (responseData[lastIndex] & 0xFF) + "." +
                         (responseData[lastIndex + 1] & 0xFF) + "." +
                         (responseData[lastIndex + 2] & 0xFF) + "." +
                         (responseData[lastIndex + 3] & 0xFF));
-            } else {
-                System.out.println("Warning: Could not extract IPv4 address from resolver response.");
             }
 
             return responseData;
         }
     }
+
 
     // Helper function to convert byte arrays to hex strings for debugging
     private static String bytesToHex(byte[] bytes) {

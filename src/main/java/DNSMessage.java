@@ -58,6 +58,7 @@ public class DNSMessage {
     public static byte[] createResponse(DNSMessage request, byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
+        // Extract Header Fields
         short transactionId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
         short qdCount = resolverBuffer.getShort();
@@ -79,8 +80,7 @@ public class DNSMessage {
 
         List<byte[]> answers = new ArrayList<>();
         for (int i = 0; i < anCount; i++) {
-            int remainingBytes = resolverBuffer.remaining();
-            if (remainingBytes < 12) {
+            if (resolverBuffer.remaining() < 12) { // Minimum answer record size
                 System.out.println("❌ Not enough bytes left for answer section!");
                 break;
             }
@@ -92,28 +92,31 @@ public class DNSMessage {
             short answerType = resolverBuffer.getShort();
             short answerClass = resolverBuffer.getShort();
             int ttl = resolverBuffer.getInt();
-            short dataLength = resolverBuffer.getShort();
+            int dataLength = resolverBuffer.getShort() & 0xFFFF;
 
             if (resolverBuffer.remaining() < dataLength) {
-                System.out.println("❌ Error: Not enough bytes left for answer data!");
+                System.out.println("❌ Error: Not enough bytes left for answer data! Expected: " + dataLength + ", Available: " + resolverBuffer.remaining());
                 break;
             }
 
             byte[] answerData = new byte[dataLength];
             resolverBuffer.get(answerData);
 
-            if (answerType == 1 && dataLength == 4) { // IPv4
+            if (answerType == 1 && dataLength == 4) { // IPv4 Address
                 System.out.println("✅ Extracted IPv4 Address: " +
                         (answerData[0] & 0xFF) + "." + (answerData[1] & 0xFF) + "." +
                         (answerData[2] & 0xFF) + "." + (answerData[3] & 0xFF));
             }
 
-            ByteBuffer answerBuffer = ByteBuffer.allocate(resolverBuffer.position() - answerStart);
+            // Copy full answer section safely
+            int answerSize = resolverBuffer.position() - answerStart;
+            ByteBuffer answerBuffer = ByteBuffer.allocate(answerSize);
             resolverBuffer.position(answerStart);
             resolverBuffer.get(answerBuffer.array());
             answers.add(answerBuffer.array());
         }
 
+        // Construct the response correctly
         int responseSize = 12 + questionSectionSize + answers.stream().mapToInt(a -> a.length).sum();
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
