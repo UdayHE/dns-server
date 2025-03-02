@@ -8,7 +8,7 @@ import java.util.List;
 public class Main {
 
     public static void main(String[] args) {
-        if (args.length < 2 || !args[0].equals("--resolver")) {
+        if (args.length < 1) {
             System.out.println("Usage: java Main --resolver <resolver_ip:port>");
             return;
         }
@@ -45,25 +45,34 @@ public class Main {
 
                 DnsPacketHeader responseHeader = new DnsPacketHeader(
                         recHeader.getId(),
-                        1, // QR indicator (1 = response)
+                        1, // QR indicator
                         recHeader.getOpcode(),
                         recHeader.getRecursionDesired(),
-                        0, // Response code: NOERROR (assumption)
+                        recHeader.getOpcode() == 0 ? 0 : 4, // Response code
                         recHeader.getQuestionCount(),
-                        0 // This will be updated later based on received answers
+                        recHeader.getQuestionCount() // Answer count should match the number of questions
                 );
 
                 byte[] response = responseHeader.toBytes();
-                List<byte[]> answers = new ArrayList<>();
 
-                if (recHeader.getOpcode() == 0) { // Standard query
+                DnsPacketHeader reqHeaderResolver = new DnsPacketHeader(
+                        recHeader.getId(),
+                        recHeader.getOpcode(),
+                        recHeader.getRecursionDesired(),
+                        recHeader.getOpcode() == 0 ? 0 : 4, // rcode
+                        recHeader.getQuestionCount() > 0 ? 1 : 0, // questionCount
+                        0 // answerCount (set to 0 for queries)
+                );
+
+                if (packet.getLength() > 12 && recHeader.getOpcode() == 0) {
                     List<Question> questions = Question.fromBytes(recHeader.getQuestionCount(), buffer, 12);
+                    List<byte[]> answers = new ArrayList<>();
 
                     for (Question question : questions) {
                         byte[] questionBytes = question.toBytes();
                         response = concatenateByteArrays(response, questionBytes);
 
-                        byte[] reqForResolver = concatenateByteArrays(responseHeader.toBytes(), questionBytes);
+                        byte[] reqForResolver = concatenateByteArrays(reqHeaderResolver.toBytes(), questionBytes);
                         System.out.println("Sending to resolver: " + bytesToHex(reqForResolver, reqForResolver.length));
 
                         DatagramPacket resolverPacket = new DatagramPacket(reqForResolver, reqForResolver.length, resolverSocketAddress);
@@ -79,18 +88,25 @@ public class Main {
                         answers.add(answerRaw);
                     }
 
+                    // Ensure the response header has the correct answer count
+                    responseHeader = new DnsPacketHeader(
+                            recHeader.getId(),
+                            1, // QR indicator
+                            recHeader.getOpcode(),
+                            recHeader.getRecursionDesired(),
+                            recHeader.getOpcode() == 0 ? 0 : 4, // Response code
+                            recHeader.getQuestionCount(),
+                            questions.size() // Answer count should match the number of questions
+                    );
+
+                    // Rebuild the response with the updated header
+                    response = responseHeader.toBytes();
+                    for (Question question : questions) {
+                        response = concatenateByteArrays(response, question.toBytes());
+                    }
                     for (byte[] answer : answers) {
                         response = concatenateByteArrays(response, answer);
                     }
-
-                    // Update answer count in response header
-                    responseHeader = new DnsPacketHeader(
-                            recHeader.getId(), 1, recHeader.getOpcode(), recHeader.getRecursionDesired(), 0,
-                            recHeader.getQuestionCount(), answers.size()
-                    );
-
-                    // Rebuild response packet with updated header
-                    response = concatenateByteArrays(responseHeader.toBytes(), response);
                 }
 
                 System.out.println("Sending " + bytesToHex(response, response.length));
@@ -123,25 +139,74 @@ public class Main {
         System.arraycopy(b, 0, result, a.length, b.length);
         return result;
     }
+
+    private static byte[] constructARecordAnswer(String name, String ipAddress) throws UnknownHostException {
+        ByteBuffer buffer = ByteBuffer.allocate(512);
+        buffer.put(domainToBytes(name));
+        buffer.putShort((short) 1); // Record type (A)
+        buffer.putShort((short) 1); // Class (IN)
+        buffer.putInt(3600); // TTL
+        buffer.putShort((short) 4); // RDATA length (4 bytes for IPv4)
+        buffer.put(InetAddress.getByName(ipAddress).getAddress()); // RDATA
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
+        return result;
+    }
+
+    private static byte[] constructUriRecordAnswer(String name, String uri) {
+        ByteBuffer buffer = ByteBuffer.allocate(512);
+        buffer.put(domainToBytes(name));
+        buffer.putShort((short) 256); // Record type (URI)
+        buffer.putShort((short) 1); // Class (IN)
+        buffer.putInt(3600); // TTL
+        byte[] uriBytes = uri.getBytes(StandardCharsets.UTF_8);
+        buffer.putShort((short) uriBytes.length); // RDATA length
+        buffer.put(uriBytes); // RDATA
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
+        return result;
+    }
+
+    private static byte[] domainToBytes(String domain) {
+        ByteBuffer buffer = ByteBuffer.allocate(512);
+        String[] labels = domain.split("\\.");
+        for (String label : labels) {
+            buffer.put((byte) label.length());
+            buffer.put(label.getBytes(StandardCharsets.UTF_8));
+        }
+        buffer.put((byte) 0);
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
+        return result;
+    }
 }
 
 class DnsPacketHeader {
-    private int id;
-    private int qrIndicator;
-    private int opcode;
-    private int recursionDesired;
-    private int responseCode;
-    private int questionCount;
-    private int answerCount;
+    private int id; // Identifier
+    private int qrIndicator; // Query/Response indicator (0 = query, 1 = response)
+    private int opcode; // Operation code (4 bits)
+    private int recursionDesired; // Recursion desired flag (1 bit)
+    private int rcode; // Response code (4 bits)
+    private int questionCount; // Number of questions
+    private int answerCount; // Number of answers
 
-    public DnsPacketHeader(int id, int qrIndicator, int opcode, int recursionDesired, int responseCode, int questionCount, int answerCount) {
+    // Primary constructor for all fields
+    public DnsPacketHeader(int id, int qrIndicator, int opcode, int recursionDesired, int rcode, int questionCount, int answerCount) {
         this.id = id;
         this.qrIndicator = qrIndicator;
         this.opcode = opcode;
         this.recursionDesired = recursionDesired;
-        this.responseCode = responseCode;
+        this.rcode = rcode;
         this.questionCount = questionCount;
         this.answerCount = answerCount;
+    }
+
+    // Simplified constructor for common use cases
+    public DnsPacketHeader(int id, int opcode, int recursionDesired, int rcode, int questionCount, int answerCount) {
+        this(id, 1, opcode, recursionDesired, rcode, questionCount, answerCount); // Default qrIndicator to 1 (response)
     }
 
     public int getId() {
@@ -160,28 +225,52 @@ class DnsPacketHeader {
         return questionCount;
     }
 
+    public int getAnswerCount() {
+        return answerCount;
+    }
+
     public byte[] toBytes() {
         ByteBuffer buffer = ByteBuffer.allocate(12);
+
+        // ID (2 bytes)
         buffer.putShort((short) id);
-        buffer.put((byte) ((qrIndicator << 7) | (opcode << 3) | (recursionDesired & 0x01)));
-        buffer.put((byte) responseCode);
+
+        // Flags (2 bytes)
+        byte flags1 = (byte) ((qrIndicator << 7) | (opcode << 3) | (recursionDesired & 0x01));
+        byte flags2 = (byte) rcode;
+        buffer.put(flags1);
+        buffer.put(flags2);
+
+        // Counts (8 bytes)
         buffer.putShort((short) questionCount);
         buffer.putShort((short) answerCount);
+        buffer.putShort((short) 0); // Authority count (not used in this implementation)
+        buffer.putShort((short) 0); // Additional count (not used in this implementation)
+
         return buffer.array();
     }
 
     public static DnsPacketHeader fromBytes(byte[] bytes) {
         ByteBuffer buffer = ByteBuffer.wrap(bytes);
+
+        // ID (2 bytes)
         int id = buffer.getShort() & 0xFFFF;
+
+        // Flags (2 bytes)
         byte flags1 = buffer.get();
         byte flags2 = buffer.get();
         int qrIndicator = (flags1 >> 7) & 0x01;
         int opcode = (flags1 >> 3) & 0x0F;
         int recursionDesired = flags1 & 0x01;
-        int responseCode = flags2 & 0x0F;
+        int rcode = flags2 & 0x0F;
+
+        // Counts (8 bytes)
         int questionCount = buffer.getShort() & 0xFFFF;
         int answerCount = buffer.getShort() & 0xFFFF;
-        return new DnsPacketHeader(id, qrIndicator, opcode, recursionDesired, responseCode, questionCount, answerCount);
+        buffer.getShort(); // Skip authority count
+        buffer.getShort(); // Skip additional count
+
+        return new DnsPacketHeader(id, qrIndicator, opcode, recursionDesired, rcode, questionCount, answerCount);
     }
 }
 
