@@ -1,7 +1,5 @@
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
+import java.net.*;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,13 +30,16 @@ public class Main {
                 System.out.println("Received a DNS request.");
 
                 byte[] clientQuery = clientPacket.getData();
-                byte[] resolverResponse = forwardQuery(clientQuery, resolverIP, resolverPort);
+                List<byte[]> resolverResponses = forwardQueries(clientQuery, resolverIP, resolverPort);
 
-                // ✅ Debug: Print final response before sending
-                System.out.println("Final response being sent: " + Arrays.toString(resolverResponse));
+                // Merge responses into a single packet
+                byte[] mergedResponse = mergeResponses(resolverResponses, clientQuery);
+
+                //Debug: Print final response before sending
+                System.out.println("Final response being sent: " + Arrays.toString(mergedResponse));
 
                 DatagramPacket responsePacket = new DatagramPacket(
-                        resolverResponse, resolverResponse.length,
+                        mergedResponse, mergedResponse.length,
                         clientPacket.getSocketAddress()
                 );
 
@@ -50,13 +51,17 @@ public class Main {
         }
     }
 
+    /**
+     * Splits multiple questions in a query into separate queries, sends them individually,
+     * and collects the responses.
+     */
     private static List<byte[]> forwardQueries(byte[] query, String resolverIP, int resolverPort) throws IOException {
         List<byte[]> responses = new ArrayList<>();
         ByteBuffer buffer = ByteBuffer.wrap(query);
 
-        short transactionId = buffer.getShort();
+        short transactionId = buffer.getShort();  // Extract Transaction ID
         buffer.getShort(); // Flags
-        short qdCount = buffer.getShort();
+        short qdCount = buffer.getShort();  // Number of questions
         buffer.getShort(); // ANCOUNT
         buffer.getShort(); // NSCOUNT
         buffer.getShort(); // ARCOUNT
@@ -65,14 +70,21 @@ public class Main {
 
         for (int i = 0; i < qdCount; i++) {
             byte[] singleQuestion = extractSingleQuestion(query, offset);
-            offset += singleQuestion.length + 4;
+            offset += singleQuestion.length + 4; // Move past the current question
 
-            responses.add(forwardQuery(singleQuestion, resolverIP, resolverPort));
+            // Create a full query packet for this single question
+            byte[] singleQuery = buildSingleQuery(transactionId, singleQuestion);
+
+            // Send individual query to resolver
+            responses.add(forwardQuery(singleQuery, resolverIP, resolverPort));
         }
 
         return responses;
     }
 
+    /**
+     * Sends a single query to the upstream resolver and returns the response.
+     */
     private static byte[] forwardQuery(byte[] query, String resolverIP, int resolverPort) throws IOException {
         try (DatagramSocket resolverSocket = new DatagramSocket()) {
             InetAddress resolverInetAddress = InetAddress.getByName(resolverIP);
@@ -96,7 +108,7 @@ public class Main {
             System.out.println("Received response ID: " + transactionId);
             System.out.println("Received response flags (before modification): " + Integer.toBinaryString(flags));
 
-            flags |= (1 << 15); // ✅ Set QR bit to 1 (response)
+            flags |= (1 << 15); // Ensure QR bit is set to 1 (response)
 
             System.out.println("Modified response flags (after setting QR): " + Integer.toBinaryString(flags));
 
@@ -109,24 +121,55 @@ public class Main {
         }
     }
 
-
+    /**
+     * Extracts a single question from the original query.
+     */
     private static byte[] extractSingleQuestion(byte[] data, int offset) {
         int end = offset;
         while (data[end] != 0) {
             end++;
-        } // Find end of domain name
+        }
         end += 5; // Move past null byte + QTYPE (2 bytes) + QCLASS (2 bytes)
 
-        return ByteBuffer.allocate(end - offset).put(data, offset, end - offset).array();
+        return Arrays.copyOfRange(data, offset, end);
     }
 
+    /**
+     * Builds a DNS query with a single question.
+     */
+    private static byte[] buildSingleQuery(short transactionId, byte[] question) {
+        ByteBuffer buffer = ByteBuffer.allocate(12 + question.length + 4);
+        buffer.putShort(transactionId);
+        buffer.putShort((short) 0x0100); // Standard query
+        buffer.putShort((short) 1); // QDCOUNT = 1
+        buffer.putShort((short) 0); // ANCOUNT
+        buffer.putShort((short) 0); // NSCOUNT
+        buffer.putShort((short) 0); // ARCOUNT
+        buffer.put(question);
+        buffer.putShort((short) 1); // Type A
+        buffer.putShort((short) 1); // Class IN
+
+        return buffer.array();
+    }
+
+    /**
+     * Merges multiple resolver responses into a single response.
+     */
     private static byte[] mergeResponses(List<byte[]> responses, byte[] originalQuery) {
         ByteBuffer mergedBuffer = ByteBuffer.allocate(512);
         mergedBuffer.put(originalQuery, 0, 12); // Copy header
 
+        short totalAnswerCount = 0;
         for (byte[] response : responses) {
+            ByteBuffer responseBuffer = ByteBuffer.wrap(response);
+            responseBuffer.position(6); // Move to ANCOUNT field
+            totalAnswerCount += responseBuffer.getShort(); // Sum up answer counts
+
             mergedBuffer.put(response, 12, response.length - 12); // Copy answers
         }
+
+        // Set the correct ANCOUNT field
+        mergedBuffer.putShort(6, totalAnswerCount);
 
         return mergedBuffer.array();
     }
