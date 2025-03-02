@@ -83,9 +83,10 @@ public class Main {
 
                     resolverRequest = concatenateByteArrays(resolverRequest, questionBytes);
 
-                    // Update offset correctly
-                    offset += question.getByteSize();
+                    // Correct offset handling for multiple questions
+                    offset += questionBytes.length;
                 }
+
 
 
                 System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
@@ -302,13 +303,13 @@ class Question {
         for (int i = 0; i < count; i++) {
             String name = bytesToName(bytes, currentOffset);
 
-            // Find the end of the domain name
+            // Move offset past the domain name (find null byte)
             int endOffset = findNullByte(bytes, currentOffset);
             if (endOffset == -1) {
                 System.err.println("ERROR: Malformed DNS query (missing null terminator for domain name).");
                 return questions;
             }
-            currentOffset = endOffset + 1;  // Move past the null terminator
+            currentOffset = endOffset + 1;  // Move past null terminator
 
             // Read Record Type (2 bytes)
             if (currentOffset + 2 > bytes.length) {
@@ -331,6 +332,7 @@ class Question {
 
         return questions;
     }
+
 
 
 
