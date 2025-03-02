@@ -61,9 +61,12 @@ public class DNSMessage {
 
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
-        responseBuffer.putShort(request.transactionId); //  Copy ID from request
+        responseBuffer.putShort(request.transactionId); // Copy ID from request
+
+        // Set QR bit to 1 (response) and other flags
         short responseFlags = (short) (0x8000 | (request.opcode << 11) | (request.recursionDesired ? 0x0100 : 0) | request.responseCode);
-        responseBuffer.putShort(responseFlags); //  Flags: QR=1, OPCODE mirrored, RD mirrored, RCODE set
+        responseBuffer.putShort(responseFlags); // Flags: QR=1, OPCODE mirrored, RD mirrored, RCODE set
+
         responseBuffer.putShort((short) request.questionSections.size()); // QDCOUNT
         responseBuffer.putShort((short) request.answerCount); // ANCOUNT (same as QDCOUNT)
         responseBuffer.putShort((short) 0); // NSCOUNT
@@ -99,7 +102,4 @@ public class DNSMessage {
         return array;
     }
 
-    public short getTransactionId() {
-        return transactionId;
-    }
 }
