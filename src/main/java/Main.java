@@ -3,7 +3,6 @@ import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class Main {
@@ -35,11 +34,6 @@ public class Main {
                 System.out.println("Received " + packet.getLength() + " bytes from " + packet.getSocketAddress());
                 System.out.println(bytesToHex(buffer, packet.getLength()));
 
-                if (packet.getSocketAddress().equals(resolverSocketAddress)) {
-                    System.out.println("Got data from resolver! Ignoring self-response.");
-                    continue;
-                }
-
                 if (packet.getLength() < 12) {
                     System.err.println("Invalid packet received (too short). Ignoring.");
                     continue;
@@ -48,28 +42,10 @@ public class Main {
                 DnsPacketHeader recHeader = DnsPacketHeader.fromBytes(buffer);
                 System.out.println(recHeader);
 
-                // Build request header for resolver
-                DnsPacketHeader reqHeaderResolver = new DnsPacketHeader(
-                        recHeader.getId(),
-                        0, // QR (0 = query)
-                        recHeader.getOpcode(),
-                        recHeader.getRecursionDesired(),
-                        0, // Response code (default to NOERROR)
-                        recHeader.getQuestionCount(),
-                        0  // Initially no answers
-                );
-
-                byte[] resolverRequest = reqHeaderResolver.toBytes();
-                int offset = 12;  // Start after the DNS header
+                byte[] response = recHeader.toBytes();
+                int offset = 12;
 
                 List<Question> extractedQuestions = new ArrayList<>();
-
-                for (Question question : extractedQuestions) {
-                    System.out.println("Final Encoded Question: " + question.getName() + " -> " + Main.bytesToHex(question.toBytes(), question.toBytes().length));
-                }
-
-                int firstDomainOffset = -1;
-
                 for (int i = 0; i < recHeader.getQuestionCount(); i++) {
                     List<Question> questionList = Question.fromBytes(1, buffer, offset);
                     if (questionList.isEmpty()) {
@@ -79,81 +55,19 @@ public class Main {
 
                     Question question = questionList.get(0);
                     extractedQuestions.add(question);
+                    byte[] questionBytes = question.toBytesUncompressed();
+                    response = concatenateByteArrays(response, questionBytes);
 
-                    byte[] questionBytes;
-                    if (firstDomainOffset == -1) {
-                        questionBytes = question.toBytes(); // First domain encoded fully
-                        firstDomainOffset = resolverRequest.length; // Save the correct offset AFTER encoding
-                    } else {
-                        questionBytes = question.toBytesUsingCompression(firstDomainOffset);
-                    }
-
-                    System.out.println("Appending Question: " + question.getName() + " -> " + Main.bytesToHex(questionBytes, questionBytes.length));
-
-                    resolverRequest = concatenateByteArrays(resolverRequest, questionBytes);
-
-                    // Move offset correctly
-                    offset += questionBytes.length;
+                    offset += question.getByteSize();
                 }
 
-
-
-
-
-                System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
-                System.out.println("Sending to resolver: " + bytesToHex(resolverRequest, resolverRequest.length));
-
-                DatagramPacket resolverPacket = new DatagramPacket(resolverRequest, resolverRequest.length, resolverSocketAddress);
-
-                System.out.println("Final Resolver Request Bytes: " + Arrays.toString(resolverRequest));
-                System.out.println("Final Resolver Request HEX: " + bytesToHex(resolverRequest, resolverRequest.length));
-
-                resolverSocket.send(resolverPacket);
-
-                byte[] resolverBuffer = new byte[512];
-                DatagramPacket resolverResponsePacket = new DatagramPacket(resolverBuffer, resolverBuffer.length);
-
-                boolean gotResponse = false;
-                for (int i = 0; i < MAX_RETRIES; i++) {
-                    try {
-                        resolverSocket.receive(resolverResponsePacket);
-                        gotResponse = true;
-                        System.out.println("Got " + resolverResponsePacket.getLength() + " bytes from resolver " + resolverResponsePacket.getSocketAddress());
-                        break;
-                    } catch (SocketTimeoutException e) {
-                        System.err.println("Timeout waiting for resolver response, retrying... (" + (i + 1) + "/" + MAX_RETRIES + ")");
-                    }
+                for (Question question : extractedQuestions) {
+                    byte[] answerBytes = constructARecordAnswer(question.getName());
+                    response = concatenateByteArrays(response, answerBytes);
                 }
 
-                if (!gotResponse) {
-                    System.err.println("Resolver did not respond after " + MAX_RETRIES + " retries. Sending SERVFAIL.");
-                    DnsPacketHeader failResponseHeader = new DnsPacketHeader(
-                            recHeader.getId(), 1, recHeader.getOpcode(), recHeader.getRecursionDesired(), 2, // SERVFAIL
-                            recHeader.getQuestionCount(), 0 // No answers
-                    );
-                    byte[] failResponse = failResponseHeader.toBytes();
-
-                    // Extract the questions **before** using them
-                    List<Question> questions = new ArrayList<>();
-                    for (int i = 0; i < recHeader.getQuestionCount(); i++) {
-                        List<Question> questionList = Question.fromBytes(1, buffer, offset);
-                        if (!questionList.isEmpty()) {
-                            Question question = questionList.get(0);
-                            questions.add(question);
-                            failResponse = concatenateByteArrays(failResponse, question.toBytes());
-                            offset += question.getByteSize();
-                        }
-                    }
-
-                    DatagramPacket responsePacket = new DatagramPacket(failResponse, failResponse.length, packet.getSocketAddress());
-                    udpSocket.send(responsePacket);
-                    continue;
-                }
-
-
-                // Send valid response back to client
-                System.out.println("Forwarding response to client: " + bytesToHex(resolverBuffer, resolverResponsePacket.getLength()));
-                DatagramPacket responsePacket = new DatagramPacket(resolverBuffer, resolverResponsePacket.getLength(), packet.getSocketAddress());
+                System.out.println("Forwarding response to client: " + bytesToHex(response, response.length));
+                DatagramPacket responsePacket = new DatagramPacket(response, response.length, packet.getSocketAddress());
                 udpSocket.send(responsePacket);
             }
         } catch (IOException e) {
@@ -182,7 +96,25 @@ public class Main {
         System.arraycopy(b, 0, result, a.length, b.length);
         return result;
     }
+
+    private static byte[] constructARecordAnswer(String domain) {
+        ByteBuffer buffer = ByteBuffer.allocate(512);
+        byte[] nameBytes = Question.domainToBytes(domain);
+
+        buffer.put(nameBytes);
+        buffer.putShort((short) 1);  // Type (A record)
+        buffer.putShort((short) 1);  // Class (IN)
+        buffer.putInt(3600);         // TTL (3600 seconds)
+        buffer.putShort((short) 4);  // Data Length (4 bytes for IPv4)
+        buffer.put(new byte[]{(byte) 192, (byte) 168, 1, 1});
+
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
+        return result;
+    }
 }
+
 
 
 class DnsPacketHeader {
@@ -276,7 +208,6 @@ class DnsPacketHeader {
 }
 
 class Question {
-
     private String name;
     private int recordType;
     private int classType;
@@ -291,73 +222,33 @@ class Question {
         return name;
     }
 
-    public byte[] toBytes() {
+    public byte[] toBytesUncompressed() {
         ByteBuffer buffer = ByteBuffer.allocate(512);
         byte[] nameBytes = domainToBytes(name);
 
-        buffer.put(nameBytes);  // Preserve original compression if present
+        buffer.put(nameBytes);
         buffer.putShort((short) recordType);
         buffer.putShort((short) classType);
 
         byte[] result = new byte[buffer.position()];
         buffer.flip();
         buffer.get(result);
-
-        System.out.println("Encoded Question: " + name + " -> " + Main.bytesToHex(result, result.length));
         return result;
     }
-
-    public byte[] toBytesUsingCompression(int offset) {
-        ByteBuffer buffer = ByteBuffer.allocate(512);
-
-        if (offset < 0 || offset > 255) {
-            throw new IllegalArgumentException("Invalid offset for compression pointer: " + offset);
-        }
-
-        buffer.put((byte) 0xC0);  // Compression pointer
-        buffer.put((byte) offset); // Points to first occurrence of domain
-
-        buffer.putShort((short) recordType);
-        buffer.putShort((short) classType);
-
-        byte[] result = new byte[buffer.position()];
-        buffer.flip();
-        buffer.get(result);
-
-        System.out.println("Compressed Question: " + name + " -> " + Main.bytesToHex(result, result.length));
-        return result;
-    }
-
-
 
     public static List<Question> fromBytes(int count, byte[] bytes, int offset) {
         List<Question> questions = new ArrayList<>();
         int currentOffset = offset;
 
         for (int i = 0; i < count; i++) {
-            String name = bytesToName(bytes, currentOffset);
-
-            // Move offset past the domain name (find null byte)
-            int endOffset = findNullByte(bytes, currentOffset);
+            String name = expandCompressedName(bytes, currentOffset);
+            int endOffset = findEndOfName(bytes, currentOffset);
             if (endOffset == -1) {
-                System.err.println("ERROR: Malformed DNS query (missing null terminator for domain name).");
                 return questions;
             }
-            currentOffset = endOffset + 1;  // Move past null terminator
-
-            // Read Record Type (2 bytes)
-            if (currentOffset + 2 > bytes.length) {
-                System.err.println("ERROR: Unexpected end of packet while reading record type.");
-                return questions;
-            }
+            currentOffset = endOffset + 1;
             int recordType = ((bytes[currentOffset] & 0xFF) << 8) | (bytes[currentOffset + 1] & 0xFF);
             currentOffset += 2;
-
-            // Read Class Type (2 bytes)
-            if (currentOffset + 2 > bytes.length) {
-                System.err.println("ERROR: Unexpected end of packet while reading class type.");
-                return questions;
-            }
             int classType = ((bytes[currentOffset] & 0xFF) << 8) | (bytes[currentOffset + 1] & 0xFF);
             currentOffset += 2;
 
@@ -367,57 +258,54 @@ class Question {
         return questions;
     }
 
-
-
-
-
-    private static byte[] domainToBytes(String domain) {
+    public static byte[] domainToBytes(String domain) {
         ByteBuffer buffer = ByteBuffer.allocate(512);
         String[] labels = domain.split("\\.");
-        int position = 0;
-
         for (String label : labels) {
-            if (label.isEmpty()) continue;  // Skip empty labels
             buffer.put((byte) label.length());
             buffer.put(label.getBytes(StandardCharsets.UTF_8));
-            position += label.length() + 1;
         }
-
         buffer.put((byte) 0); // NULL terminator
         byte[] result = new byte[buffer.position()];
         buffer.flip();
         buffer.get(result);
-
-        System.out.println("Encoded Domain: " + domain + " -> " + Main.bytesToHex(result, result.length));
         return result;
     }
 
-    private static String bytesToName(byte[] bytes, int offset) {
+    private static String expandCompressedName(byte[] bytes, int offset) {
         StringBuilder name = new StringBuilder();
         int i = offset;
-        while (i < bytes.length && bytes[i] != 0) {
+        int jumps = 0;
+
+        while (i < bytes.length) {
             int length = bytes[i] & 0xFF;
-            i++;
-            if ((length & 0xC0) == 0xC0) {  // Compression pointer detected
-                int pointer = ((length & 0x3F) << 8) | (bytes[i] & 0xFF);
-                name.append(bytesToName(bytes, pointer));  // Resolve compression
-                i++;
+            if (length == 0) {
+                break;
+            }
+
+            if ((length & 0xC0) == 0xC0) {
+                if (jumps++ > 10) {
+                    throw new RuntimeException("Too many compression pointer jumps.");
+                }
+                int pointer = ((length & 0x3F) << 8) | (bytes[i + 1] & 0xFF);
+                name.append(expandCompressedName(bytes, pointer));
                 break;
             } else {
                 if (name.length() > 0) {
                     name.append(".");
                 }
+                i++;
                 name.append(new String(bytes, i, length, StandardCharsets.UTF_8));
                 i += length;
             }
         }
+
         return name.toString();
     }
 
-
-    private static int findNullByte(byte[] bytes, int offset) {
+    private static int findEndOfName(byte[] bytes, int offset) {
         for (int i = offset; i < bytes.length; i++) {
-            if (bytes[i] == 0) {
+            if (bytes[i] == 0 || (bytes[i] & 0xC0) == 0xC0) {
                 return i;
             }
         }
@@ -425,7 +313,6 @@ class Question {
     }
 
     public int getByteSize() {
-        return domainToBytes(name).length + 4; // Domain bytes + 2 (type) + 2 (class)
+        return domainToBytes(name).length + 4;
     }
-
 }
