@@ -54,38 +54,36 @@ public class DNSMessage {
         name.add((byte) 0);
         return listToByteArray(name);
     }
-
+    
     public static byte[] createResponse(DNSMessage request, byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
-        // Extract Transaction ID and Flags
+        // Extract Header Fields
         short transactionId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
-
-        // Extract QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT
         short qdCount = resolverBuffer.getShort();
         short anCount = resolverBuffer.getShort();
         short nsCount = resolverBuffer.getShort();
         short arCount = resolverBuffer.getShort();
 
-        // Debug: Print extracted counts
+        // Debug Logs
         System.out.println("ANCOUNT: " + anCount + ", NSCOUNT: " + nsCount + ", ARCOUNT: " + arCount);
 
-        // Skip the question section
+        // Skip the question section (move the buffer to the Answer Section)
         int questionSectionSize = request.questionSections.stream().mapToInt(q -> q.length + 4).sum();
         resolverBuffer.position(12 + questionSectionSize);
 
-        // Extract the Answer Section (Only if ANCOUNT > 0)
+        // Extract the Answer Section
         List<byte[]> answers = new ArrayList<>();
         if (anCount > 0) {
             for (int i = 0; i < anCount; i++) {
                 int remainingBytes = resolverBuffer.remaining();
-                if (remainingBytes < 12) {  // Minimum size of an answer
+                if (remainingBytes < 12) {  // Minimum answer record size
                     System.out.println("❌ Not enough bytes left for answer section! Skipping.");
                     break;
                 }
 
-                int answerStart = resolverBuffer.position();  // Track the answer section start
+                int answerStart = resolverBuffer.position();  // Track position
 
                 // Read Name (Handling Compression)
                 byte[] nameField = new byte[2];
@@ -98,7 +96,7 @@ public class DNSMessage {
                 short answerType = resolverBuffer.getShort();
                 short answerClass = resolverBuffer.getShort();
                 int ttl = resolverBuffer.getInt();
-                int dataLength = resolverBuffer.getShort() & 0xFFFF; // Convert unsigned
+                int dataLength = resolverBuffer.getShort() & 0xFFFF; // Convert to unsigned
 
                 if (resolverBuffer.remaining() < dataLength) {
                     System.out.println("❌ Not enough bytes left for answer data! Expected: " + dataLength + ", Available: " + resolverBuffer.remaining());
@@ -108,8 +106,8 @@ public class DNSMessage {
                 byte[] answerData = new byte[dataLength];
                 resolverBuffer.get(answerData);
 
-                // Debug: Print extracted Answer IP
-                if (answerType == 1 && dataLength == 4) { // IPv4 Only
+                // Debug: Print Extracted IPv4 Address
+                if (answerType == 1 && dataLength == 4) { // Only IPv4
                     System.out.println("Extracted IPv4 Address: " +
                             (answerData[0] & 0xFF) + "." + (answerData[1] & 0xFF) + "." +
                             (answerData[2] & 0xFF) + "." + (answerData[3] & 0xFF));
