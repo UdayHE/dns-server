@@ -82,7 +82,7 @@ public class DNSMessage {
 
 
         // Ensure transaction ID matches original request
-        responseBuffer.putShort(0, transactionId); // Overwrite transaction ID to ensure it matches the request
+        responseBuffer.putShort(0, responseId); // Overwrite transaction ID to ensure it matches the request
 
         responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
