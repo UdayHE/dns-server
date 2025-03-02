@@ -65,11 +65,12 @@ public class Main {
 
             resolverSocket.send(resolverRequestPacket);
 
-            byte[] responseBuffer = new byte[512];
+            // Use a larger buffer to handle larger responses
+            byte[] responseBuffer = new byte[4096]; // Increased buffer size to 4096 bytes
             DatagramPacket resolverResponsePacket = new DatagramPacket(responseBuffer, responseBuffer.length);
             resolverSocket.receive(resolverResponsePacket);
 
-            byte[] responseData = resolverResponsePacket.getData();
+            byte[] responseData = Arrays.copyOf(resolverResponsePacket.getData(), resolverResponsePacket.getLength());
 
             // Debugging: Print hex response
             System.out.println("Final response (hex): " + bytesToHex(responseData));
