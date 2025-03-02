@@ -99,7 +99,7 @@ public class Main {
                     }
                 }
 
-                return mergeResponses(originalRequest.id, responses);
+                return mergeResponses(originalRequest, responses);
             } else {
                 return sendQueryToResolver(requestData, resolverAddress, socket);
             }
@@ -128,6 +128,37 @@ public class Main {
         return Arrays.copyOfRange(responsePacket.getData(), 0, responsePacket.getLength());
     }
 
+    static byte[] mergeResponses(DNSMessage originalRequest, List<byte[]> responses) {
+        ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
+        buffer.putShort(originalRequest.id);
+        buffer.putShort((short) 0x8180); // Response, no error
+
+        buffer.putShort((short) originalRequest.questions.size()); // Question count
+        buffer.putShort((short) responses.size()); // Answer count (total answers from all responses)
+        buffer.putShort((short) 0); // Authority count
+        buffer.putShort((short) 0); // Additional count
+
+        // Write original question section (uncompressed)
+        for (Question question : originalRequest.questions) {
+            writeDomainName(buffer, question.qName);
+            buffer.putShort(question.qType);
+            buffer.putShort(question.qClass);
+        }
+
+        // Extract and write the answers from the resolver responses
+        for (byte[] response : responses) {
+            ByteBuffer responseBuffer = ByteBuffer.wrap(response);
+            responseBuffer.position(12); // Skip the response header
+            while (responseBuffer.hasRemaining() && buffer.position() < 512) { // Ensure we don't exceed buffer size
+                buffer.put(responseBuffer.get());
+            }
+        }
+
+        buffer.flip();
+        byte[] mergedResponse = new byte[buffer.remaining()];
+        buffer.get(mergedResponse);
+        return mergedResponse;
+    }
 
     static byte[] buildSingleQuestionQuery(short id, Question question) {
         ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
@@ -144,29 +175,6 @@ public class Main {
         byte[] queryData = new byte[buffer.remaining()];
         buffer.get(queryData);
         return queryData;
-    }
-
-    static byte[] mergeResponses(short id, List<byte[]> responses) {
-        ByteBuffer buffer = ByteBuffer.allocate(512).order(ByteOrder.BIG_ENDIAN);
-        buffer.putShort(id);
-        buffer.putShort((short) 0x8180);
-        buffer.putShort((short) responses.size());
-        buffer.putShort((short) responses.size());
-        buffer.putShort((short) 0);
-        buffer.putShort((short) 0);
-
-        for (byte[] response : responses) {
-            ByteBuffer responseBuffer = ByteBuffer.wrap(response);
-            responseBuffer.position(12);
-            while (responseBuffer.hasRemaining()) {
-                buffer.put(responseBuffer.get());
-            }
-        }
-
-        buffer.flip();
-        byte[] mergedResponse = new byte[buffer.remaining()];
-        buffer.get(mergedResponse);
-        return mergedResponse;
     }
 
     static DNSMessage parseDnsQuery(byte[] request) {
