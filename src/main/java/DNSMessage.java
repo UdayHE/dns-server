@@ -2,7 +2,6 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class DNSMessage {
-    private final byte[] rawData;
     private final short transactionId;
     private final short flags;
     private final byte opcode;
@@ -12,7 +11,6 @@ public class DNSMessage {
     private final int questionEndIndex;
 
     public DNSMessage(byte[] data) {
-        this.rawData = data;
         ByteBuffer buffer = ByteBuffer.wrap(data);
 
         this.transactionId = buffer.getShort();  // Extract ID
@@ -38,21 +36,30 @@ public class DNSMessage {
 
     public static byte[] createResponse(DNSMessage request) {
         int questionLength = request.questionSection.length;
-        int responseSize = 12 + questionLength; // Header + Question section
+        int answerLength = questionLength + 10 + 4; // Name + Type + Class + TTL + Length + IP
+        int responseSize = 12 + questionLength + answerLength; // Header + Question + Answer
 
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
         // 🔹 Header Section (12 bytes)
-        responseBuffer.putShort(request.transactionId); // Copy ID from request
+        responseBuffer.putShort(request.transactionId); // ✅ Copy ID from request
         short responseFlags = (short) (0x8000 | (request.opcode << 11) | (request.recursionDesired ? 0x0100 : 0) | request.responseCode);
-        responseBuffer.putShort(responseFlags); // Flags: QR=1, OPCODE mirrored, RD mirrored, RCODE set
-        responseBuffer.putShort((short) 1); // QDCOUNT (1 question)
-        responseBuffer.putShort((short) 0); // ANCOUNT (No answer required yet)
+        responseBuffer.putShort(responseFlags); // ✅ Flags: QR=1, OPCODE mirrored, RD mirrored, RCODE set
+        responseBuffer.putShort((short) 1); // ✅ QDCOUNT (1 question)
+        responseBuffer.putShort((short) 1); // ✅ ANCOUNT (1 answer)
         responseBuffer.putShort((short) 0); // NSCOUNT
         responseBuffer.putShort((short) 0); // ARCOUNT
 
         // 🔹 Question Section (Copy from request)
         responseBuffer.put(request.questionSection);
+
+        // 🔹 Answer Section (codecrafters.io -> 8.8.8.8)
+        responseBuffer.put(request.questionSection); // Name (Use the same as in the question)
+        responseBuffer.putShort((short) 1); // Type (A)
+        responseBuffer.putShort((short) 1); // Class (IN)
+        responseBuffer.putInt(60); // TTL (60 seconds)
+        responseBuffer.putShort((short) 4); // Length (IPv4 address size)
+        responseBuffer.put(new byte[]{8, 8, 8, 8}); // Data (IP: 8.8.8.8)
 
         return responseBuffer.array();
     }
