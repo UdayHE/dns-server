@@ -80,7 +80,14 @@ public class Main {
 
                         byte[] resolverBuffer = new byte[512];
                         DatagramPacket resolverResponsePacket = new DatagramPacket(resolverBuffer, resolverBuffer.length);
-                        resolverSocket.receive(resolverResponsePacket);
+                        resolverSocket.setSoTimeout(2000); // Timeout to prevent infinite waiting
+                        try {
+                            resolverSocket.receive(resolverResponsePacket);
+                            System.out.println("Got " + resolverResponsePacket.getLength() + " bytes from resolver " + resolverResponsePacket.getSocketAddress());
+                        } catch (SocketTimeoutException e) {
+                            System.err.println("Timeout waiting for resolver response");
+                            continue; // Skip sending an incomplete response
+                        }
 
                         System.out.println("Got " + resolverResponsePacket.getLength() + " bytes from resolver " + resolverResponsePacket.getSocketAddress());
                         byte[] answerRaw = new byte[resolverResponsePacket.getLength() - reqForResolver.length];
@@ -90,14 +97,10 @@ public class Main {
 
                     // Ensure the response header has the correct answer count
                     responseHeader = new DnsPacketHeader(
-                            recHeader.getId(),
-                            1, // QR indicator
-                            recHeader.getOpcode(),
-                            recHeader.getRecursionDesired(),
-                            recHeader.getOpcode() == 0 ? 0 : 4, // Response code
-                            recHeader.getQuestionCount(),
-                            questions.size() // Answer count should match the number of questions
+                            recHeader.getId(), 1, recHeader.getOpcode(), recHeader.getRecursionDesired(), 0,
+                            recHeader.getQuestionCount(), answers.size() // Use actual number of answers
                     );
+
 
                     // Rebuild the response with the updated header
                     response = responseHeader.toBytes();
@@ -112,6 +115,7 @@ public class Main {
                 System.out.println("Sending " + bytesToHex(response, response.length));
                 DatagramPacket responsePacket = new DatagramPacket(response, response.length, packet.getSocketAddress());
                 udpSocket.send(responsePacket);
+                System.out.println("Response sent to client: " + bytesToHex(response, response.length));
             }
         } catch (IOException e) {
             e.printStackTrace();
