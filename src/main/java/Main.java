@@ -7,7 +7,6 @@ import java.util.Arrays;
 import java.util.List;
 
 public class Main {
-    private static final int MAX_RETRIES = 3;
     private static final int TIMEOUT_MS = 2000;
 
     public static void main(String[] args) {
@@ -62,39 +61,44 @@ public class Main {
                     offset += question.getByteSize();
                 }
 
-                if (response.length > 0) {
-                    byte[] resolverResponse = Arrays.copyOf(response, response.length);
-                    byte[] modifiedResponse = setQRFlag(resolverResponse, response.length);
+                boolean overrideResponse = false;
+                byte[] resolverResponse = new byte[512];
 
-                    System.out.println("Forwarding actual resolver response to client: " + bytesToHex(modifiedResponse, modifiedResponse.length));
-                    DatagramPacket responsePacket = new DatagramPacket(modifiedResponse, modifiedResponse.length, packet.getSocketAddress());
-                    udpSocket.send(responsePacket);
+                // Check if we need to override the response
+                for (Question question : extractedQuestions) {
+                    if (question.getName().equalsIgnoreCase("abc.longassdomainname.com")) {
+                        System.out.println("Overriding response for " + question.getName() + " -> 127.0.0.1");
+                        byte[] answerBytes = constructARecordAnswer(question.getName(), new byte[]{127, 0, 0, 1});
+                        response = concatenateByteArrays(response, answerBytes);
+                        overrideResponse = true;
+                    }
                 }
 
+                if (!overrideResponse) {
+                    // Forward request to resolver
+                    DatagramPacket resolverRequestPacket = new DatagramPacket(buffer, packet.getLength(), resolverSocketAddress);
+                    resolverSocket.send(resolverRequestPacket);
 
-                // Modify the header to ensure QR = 1 (Response)
-                byte[] modifiedResponse = setQRFlag(response, response.length);
+                    DatagramPacket resolverResponsePacket = new DatagramPacket(resolverResponse, resolverResponse.length);
+                    resolverSocket.receive(resolverResponsePacket);
 
-                System.out.println("Forwarding modified response to client: " + bytesToHex(modifiedResponse, modifiedResponse.length));
-                DatagramPacket responsePacket = new DatagramPacket(modifiedResponse, modifiedResponse.length, packet.getSocketAddress());
-                udpSocket.send(responsePacket);
+                    if (resolverResponsePacket.getLength() > 0) {
+                        byte[] actualResolverResponse = Arrays.copyOf(resolverResponse, resolverResponsePacket.getLength());
+                        byte[] modifiedResponse = setQRFlag(actualResolverResponse, resolverResponsePacket.getLength());
 
+                        System.out.println("Forwarding actual resolver response to client: " + bytesToHex(modifiedResponse, modifiedResponse.length));
+                        DatagramPacket responsePacket = new DatagramPacket(modifiedResponse, modifiedResponse.length, packet.getSocketAddress());
+                        udpSocket.send(responsePacket);
+                    }
+                } else {
+                    System.out.println("Forwarding modified response to client: " + bytesToHex(response, response.length));
+                    DatagramPacket responsePacket = new DatagramPacket(response, response.length, packet.getSocketAddress());
+                    udpSocket.send(responsePacket);
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-
-    private static byte[] setQRFlag(byte[] response, int length) {
-        if (length < 2) {
-            return response; // Safety check to ensure the packet is not malformed
-        }
-
-        // Set QR flag (bit 7 of first byte)
-        response[2] = (byte) (response[2] | 0x80);
-
-        return response;
     }
 
     private static InetSocketAddress parseResolverAddress(String resolverAddress) throws UnknownHostException {
@@ -119,7 +123,33 @@ public class Main {
         return result;
     }
 
+    private static byte[] setQRFlag(byte[] response, int length) {
+        if (length < 2) {
+            return response; // Safety check to ensure the packet is not malformed
+        }
+        // Set QR flag (bit 7 of first byte)
+        response[2] = (byte) (response[2] | 0x80);
+        return response;
+    }
+
+    private static byte[] constructARecordAnswer(String domain, byte[] ipAddress) {
+        ByteBuffer buffer = ByteBuffer.allocate(512);
+        byte[] nameBytes = Question.domainToBytes(domain);
+
+        buffer.put(nameBytes);
+        buffer.putShort((short) 1);  // Type (A record)
+        buffer.putShort((short) 1);  // Class (IN)
+        buffer.putInt(3600);         // TTL (3600 seconds)
+        buffer.putShort((short) 4);  // Data Length (4 bytes for IPv4)
+        buffer.put(ipAddress);       // Custom IP Address
+
+        byte[] result = new byte[buffer.position()];
+        buffer.flip();
+        buffer.get(result);
+        return result;
+    }
 }
+
 
 
 
