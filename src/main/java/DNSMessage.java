@@ -67,7 +67,7 @@ public class DNSMessage {
     public byte[] createResponse(byte[] resolverResponse) {
         ByteBuffer resolverBuffer = ByteBuffer.wrap(resolverResponse);
 
-        // Extract response header
+        // Extract response header fields
         short responseId = resolverBuffer.getShort();
         short responseFlags = resolverBuffer.getShort();
         short qdCount = resolverBuffer.getShort();
@@ -75,32 +75,26 @@ public class DNSMessage {
         short nsCount = resolverBuffer.getShort();
         short arCount = resolverBuffer.getShort();
 
-
         // Allocate buffer dynamically
         int responseSize = Math.min(resolverResponse.length, MAX_UDP_SIZE);
         ByteBuffer responseBuffer = ByteBuffer.allocate(responseSize);
 
-
         // Ensure transaction ID matches original request
-        responseBuffer.putShort(0, transactionId); // Overwrite transaction ID to ensure it matches the request
+        responseBuffer.putShort(transactionId); // Overwrite transaction ID
+        responseBuffer.putShort(responseFlags); //Copy the flags from resolver response
 
-        responseBuffer.putShort(responseFlags);
         responseBuffer.putShort(qdCount);
         responseBuffer.putShort(anCount);
-//        responseBuffer.putShort(nsCount);
-//        responseBuffer.putShort(arCount);
-        // Ignore Authority & Additional Sections
         responseBuffer.putShort(8, (short) 0); // Authority count
         responseBuffer.putShort(10, (short) 0); // Additional count
-
-
 
         // Copy original question section (avoid mismatches)
         for (Question question : questions) {
             byte[] questionBytes = question.toBytes();
-            if (responseBuffer.remaining() < questionBytes.length) break;
+            if (responseBuffer.remaining() < questionBytes.length) break; //stop when buffer is full
             responseBuffer.put(questionBytes);
         }
+
 
         // Copy resolver answer section (ensuring no truncation)
         int answerSectionSize = Math.min(resolverBuffer.remaining(), responseBuffer.remaining());
@@ -108,30 +102,33 @@ public class DNSMessage {
             byte[] answerData = new byte[answerSectionSize];
             resolverBuffer.get(answerData, 0, answerSectionSize);
 
-            // Extract record type to check for A records
+            // Extract record type to check for A records, and validate rdata length
             ByteBuffer answerBuffer = ByteBuffer.wrap(answerData);
             int nameOffset = answerBuffer.position();
-            short type = answerBuffer.getShort(nameOffset + 2);
-
-            // Ensure A-record has exactly 4-byte RDATA
-            if (type == 1) {  // Type 1 = A Record
-                short rdLength = answerBuffer.getShort(nameOffset + 10);
-                if (rdLength != 4) {
-                    System.err.println("[Error] Invalid RDATA length for A record: " + rdLength);
-                    return new byte[0]; // Return empty response to prevent invalid records
+            if(answerData.length >= nameOffset + 12) { //check to ensure that array is long enough to read
+                short type = answerBuffer.getShort(nameOffset + 2);
+                if (type == 1) { // Type 1 = A Record
+                    short rdLength = answerBuffer.getShort(nameOffset + 10);
+                    if (rdLength != 4) {
+                        System.err.println("[Warning] Non-standard RDATA length for A record: " + rdLength + ".  Processing anyway.");
+                    }
                 }
             }
-
             responseBuffer.put(answerData);
+
         }
 
+        // Ensure response doesn't exceed 512 bytes, set truncation flag if truncated by proxy or resolver
+        if (responseBuffer.position() > MAX_UDP_SIZE || ((responseFlags & 0x0200) == 0x0200)) {
 
-
-        // Ensure response doesn't exceed 512 bytes
-        if (responseBuffer.position() > MAX_UDP_SIZE) {
             System.out.println("[Warning] Response exceeded 512 bytes, setting truncation flag.");
-            responseBuffer.putShort(2, (short) (responseBuffer.getShort(2) | 0x0200)); // Set TC flag
+
+            short flags = responseBuffer.getShort(2); //Get flags
+            flags |= 0x0200;  //Set Truncation bit
+            responseBuffer.putShort(2, flags);  //Put flags back.
+
         }
+
 
         // Debugging Output
         System.out.println("[Debug] Response Size: " + responseBuffer.position());
@@ -145,22 +142,8 @@ public class DNSMessage {
         responseBuffer.rewind();
         responseBuffer.get(response, 0, response.length);
 
-        // Trim extra padding if response is exactly 512 bytes (potential issue)
-        if (response.length == MAX_UDP_SIZE) {
-            int lastNonZeroIndex = response.length - 1;
-            while (lastNonZeroIndex > HEADER_SIZE && response[lastNonZeroIndex] == 0) {
-                lastNonZeroIndex--;
-            }
-            byte[] trimmedResponse = new byte[lastNonZeroIndex + 1];
-            System.arraycopy(response, 0, trimmedResponse, 0, trimmedResponse.length);
-            response = trimmedResponse;
-        }
-
-        System.out.println("[Debug] Final Trimmed Response Size: " + response.length);
-        System.out.println("[Debug] First 50 Bytes of Trimmed Response: " + java.util.Arrays.toString(java.util.Arrays.copyOf(response, Math.min(50, response.length))));
-        System.out.println("[Debug] Answer Section Bytes: " +
-                java.util.Arrays.toString(java.util.Arrays.copyOfRange(response, HEADER_SIZE, response.length)));
-
         return response;
     }
+
+
 }
