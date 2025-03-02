@@ -185,8 +185,6 @@ class DnsPacketHeader {
     }
 }
 
-
-
 class Question {
     private String name;
     private int recordType;
