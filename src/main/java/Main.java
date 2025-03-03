@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 public class Main {
+
     public static void main(String[] args) {
         String resolverIP = args[1].split(":")[0];
         int resolverPort = Integer.parseInt(args[1].split(":")[1]);
@@ -18,22 +19,23 @@ public class Main {
                 byte[] buf = new byte[512];
                 DatagramPacket packet = new DatagramPacket(buf, buf.length);
                 serverSocket.receive(packet);
+
                 System.out.println("Received data");
 
                 DNSMessage question = new DNSMessage(buf);
 
                 // Extract OPCODE from flags
-                int opcode = (question.flags >> 11) & 0xF;  // Extract bits 11-14
+                int opcode = (question.flags >> 11) & 0xF; // Extract bits 11-14
 
-                if (opcode != 0) {  // If OPCODE is not `0` (Standard Query)
-                    question.setErrorResponse(4);  // Set `RCODE = 4` (Not Implemented)
+                if (opcode != 0) { // If OPCODE is not `0` (Standard Query)
+                    question.setErrorResponse(4); // Set `RCODE = 4` (Not Implemented)
                 } else {
                     for (String qd : question.qd) {
                         DNSMessage forward = question.clone();
                         forward.qd = new ArrayList<>();
                         forward.qd.add(qd);
-                        byte[] buffer = forward.array();
 
+                        byte[] buffer = forward.array();
                         DatagramPacket forwardPacket = new DatagramPacket(buffer, buffer.length, resolver);
                         serverSocket.send(forwardPacket);
 
@@ -42,20 +44,22 @@ public class Main {
                         serverSocket.receive(forwardPacket);
 
                         forward = new DNSMessage(buffer);
+
                         for (String an : forward.an.keySet()) {
                             question.an.put(an, forward.an.get(an));
                         }
                     }
 
                     // Set response flags
-                    int flags = question.flags & 0b0110111111111111;  // Clear QR and RD bits
-                    flags |= 0b1000000000000000;  // Set QR (Response)
+                    int flags = question.flags & 0b0110111111111111; // Clear QR and RA bits
+                    flags |= 0b1000000000000000; // Set QR (Response)
                     question.flags = (short) flags;
                 }
 
                 byte[] buffer = question.array();
                 DatagramPacket sendPacket = new DatagramPacket(buffer, buffer.length, packet.getSocketAddress());
                 serverSocket.send(sendPacket);
+
             }
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
@@ -69,7 +73,8 @@ class DNSMessage {
     public List<String> qd = new ArrayList<>();
     public Map<String, byte[]> an = new HashMap<>();
 
-    public DNSMessage() {}
+    public DNSMessage() {
+    }
 
     public DNSMessage(byte[] array) {
         ByteBuffer buffer = ByteBuffer.wrap(array);
@@ -90,7 +95,7 @@ class DNSMessage {
             String domain = decodeDomainName(buffer, array);
             buffer.getShort(); // Type = A
             buffer.getShort(); // Class = IN
-            buffer.getInt();   // TTL
+            buffer.getInt(); // TTL
             buffer.getShort(); // Length
             byte[] ip = new byte[4];
             buffer.get(ip);
@@ -99,14 +104,13 @@ class DNSMessage {
     }
 
     public void setErrorResponse(int rcode) {
-        flags = (short) ((1 << 15) | (rcode & 0xF));  // Set QR = 1 and RCODE
-        qd.clear();  // No questions in response
-        an.clear();  // No answers
+        flags = (short) ((1 << 15) | (rcode & 0xF)); // Set QR = 1 and RCODE
+        qd.clear(); // No questions in response
+        an.clear(); // No answers
     }
 
     public byte[] array() {
         ByteBuffer buffer = ByteBuffer.allocate(512);
-
         buffer.putShort(id);
         buffer.putShort(flags);
         buffer.putShort((short) qd.size());
@@ -150,7 +154,6 @@ class DNSMessage {
         StringJoiner labels = new StringJoiner(".");
         boolean compressed = false;
         int position = 0;
-
         while ((labelLength = buffer.get()) != 0) {
             if ((labelLength & 0xC0) == 0xC0) {
                 compressed = true;
@@ -163,7 +166,6 @@ class DNSMessage {
                 labels.add(new String(label));
             }
         }
-
         if (compressed) {
             buffer.position(position);
         }
