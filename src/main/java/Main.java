@@ -98,13 +98,19 @@ public class Main {
         List<Byte> questionBytes = new ArrayList<>();
         while (true) {
             byte length = buffer.get();
-            if (length == 0) {
+            if ((length & 0xC0) == 0xC0) { // Compressed label
+                int pointer = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
+                byte[] uncompressed = uncompressLabel(buffer, pointer);
+                questionBytes.addAll(toByteList(uncompressed));
+                break;
+            } else if (length == 0) { // End of label sequence
                 questionBytes.add(length);
                 break;
-            }
-            questionBytes.add(length);
-            for (int i = 0; i < length; i++) {
-                questionBytes.add(buffer.get());
+            } else { // Uncompressed label
+                questionBytes.add(length);
+                for (int i = 0; i < length; i++) {
+                    questionBytes.add(buffer.get());
+                }
             }
         }
         questionBytes.add(buffer.get()); // Type
@@ -117,6 +123,22 @@ public class Main {
             question[i] = questionBytes.get(i);
         }
         return question;
+    }
+
+    private static byte[] uncompressLabel(ByteBuffer buffer, int pointer) {
+        int oldPosition = buffer.position();
+        buffer.position(pointer);
+        byte[] uncompressed = parseQuestion(buffer).clone();
+        buffer.position(oldPosition);
+        return uncompressed;
+    }
+
+    private static List<Byte> toByteList(byte[] array) {
+        List<Byte> list = new ArrayList<>();
+        for (byte b : array) {
+            list.add(b);
+        }
+        return list;
     }
 
     private static byte[] forwardDnsQuery(byte[] request, String resolverAddress) throws IOException {
