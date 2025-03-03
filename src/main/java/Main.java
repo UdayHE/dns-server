@@ -1,6 +1,6 @@
-import dns.DNSAnswer;
-import dns.DNSMessage;
-import dns.DNSParser;
+import dns.Answer;
+import dns.Message;
+import dns.Parser;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -31,11 +31,11 @@ public class Main {
                 final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 serverSocket.receive(packet);
 
-                DNSMessage request = new DNSParser().parse(packet);
+                Message request = new Parser().parse(packet);
 
-                List<DNSAnswer> answers = new ArrayList<>();
+                List<Answer> answers = new ArrayList<>();
                 for (int i = 0; i < request.getQuestionCount(); i++) {
-                    DNSMessage resolverRequest = new DNSMessage(request.getHeader(),
+                    Message resolverRequest = new Message(request.getHeader(),
                             List.of(request.getQuestions().get(i)),
                             new ArrayList<>());
                     resolverRequest.getHeader().setQr((byte) 0);
@@ -47,12 +47,12 @@ public class Main {
                     byte[] respBuffer = new byte[BUFFER_SIZE];
                     final DatagramPacket resolverRespPacket = new DatagramPacket(respBuffer, respBuffer.length);
                     serverSocket.receive(resolverRespPacket);
-                    DNSMessage resolverResponse = new DNSParser().parse(resolverRespPacket);
+                    Message resolverResponse = new Parser().parse(resolverRespPacket);
                     if (!resolverResponse.getQuestions().isEmpty())
                         answers.add(resolverResponse.getAnswers().getFirst());
                 }
 
-                DNSMessage response = new DNSMessage(request.getHeader(), request.getQuestions(), answers);
+                Message response = new Message(request.getHeader(), request.getQuestions(), answers);
                 response.getHeader().setQr((byte) 1);
                 response.getHeader().setAnCount((short) response.getQuestions().size());
 

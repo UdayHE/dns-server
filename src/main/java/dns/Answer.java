@@ -4,7 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-public class DNSAnswer {
+public class Answer {
 
     // Fields representing the type, class, time-to-live, resource data length, question, answer, and length of the DNS answer
     private short qType;
@@ -19,7 +19,7 @@ public class DNSAnswer {
     private static final String SEPARATOR = "\\.";
 
     // Constructor to initialize a dns.DNSAnswer object with question, qType, qClass, rdLength, and answer
-    public DNSAnswer(String question, short qType, short qClass, short rdLength, String answer) {
+    public Answer(String question, short qType, short qClass, short rdLength, String answer) {
         this.question = question;
         this.qType = qType;
         this.qClass = qClass;

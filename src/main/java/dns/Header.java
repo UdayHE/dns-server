@@ -2,7 +2,7 @@ package dns;
 
 import java.nio.ByteBuffer;
 
-public class DNSHeader {
+public class Header {
 
     private short id;
     private byte qr;
@@ -40,7 +40,7 @@ public class DNSHeader {
         return flags;
     }
 
-    public DNSHeader(short id, short flags, short qdCount, short anCount, short nsCount, short arCount) {
+    public Header(short id, short flags, short qdCount, short anCount, short nsCount, short arCount) {
         this.id = id;
         this.qdCount = qdCount;
         this.anCount = anCount;

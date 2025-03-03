@@ -5,13 +5,13 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
-public class DNSQuestion {
+public class Question {
 
     private final short qType;
     private final short qClass;
     private final String question;
 
-    public DNSQuestion(String question, short qType, short qClass) {
+    public Question(String question, short qType, short qClass) {
         if (question == null || question.isEmpty()) {
             throw new IllegalArgumentException("Question cannot be null or empty");
         }

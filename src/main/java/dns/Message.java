@@ -4,17 +4,17 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DNSMessage {
+public class Message {
 
-    private final DNSHeader header;
-    private final List<DNSQuestion> questions;
-    private final List<DNSAnswer> answers;
+    private final Header header;
+    private final List<Question> questions;
+    private final List<Answer> answers;
 
     private static final String SEPARATOR = " - ";
     private static final int BUFFER_SIZE = 512;
 
-    public DNSMessage(DNSHeader header, List<DNSQuestion> questions, List<DNSAnswer> answers) {
-        this.header = new DNSHeader(header.getId(), header.getFlags(), header.getQdCount(), header.getAnCount(),
+    public Message(Header header, List<Question> questions, List<Answer> answers) {
+        this.header = new Header(header.getId(), header.getFlags(), header.getQdCount(), header.getAnCount(),
                 header.getNsCount(), header.getArCount());
         this.questions = new ArrayList<>(questions);
         this.answers = new ArrayList<>(answers);
@@ -24,24 +24,24 @@ public class DNSMessage {
         return header.getQdCount();
     }
 
-    public DNSHeader getHeader() {
+    public Header getHeader() {
         return header;
     }
 
-    public List<DNSQuestion> getQuestions() {
+    public List<Question> getQuestions() {
         return questions;
     }
 
-    public List<DNSAnswer> getAnswers() {
+    public List<Answer> getAnswers() {
         return answers;
     }
 
     public byte[] getMessage() {
         ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE)
                 .put(header.getHeader());
-        for (DNSQuestion question : questions)
+        for (Question question : questions)
             buffer.put(question.getQuestion());
-        for (DNSAnswer answer : answers)
+        for (Answer answer : answers)
             buffer.put(answer.getAnswer());
         return buffer.array();
     }
