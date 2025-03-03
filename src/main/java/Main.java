@@ -20,7 +20,6 @@ public class Main {
     private static final int BUFFER_SIZE = 512;
     private static final String ARGS_SEPARATOR = ":";
 
-
     public static void main(String[] args) {
         log.log(Level.INFO, "Logs from your program will appear here!");
 
@@ -51,22 +50,32 @@ public class Main {
 
     private static List<Answer> getAnswers(Message request, SocketAddress resolver, DatagramSocket serverSocket) throws IOException {
         List<Answer> answers = new ArrayList<>();
+        if (resolver == null) {
+            log.log(Level.WARNING, "Resolver address is not provided.");
+            return answers;
+        }
         for (int i = 0; i < request.getQuestionCount(); i++) {
-            Message resolverRequest = new Message(request.getHeader(),
-                    List.of(request.getQuestions().get(i)),
-                    new ArrayList<>());
-            resolverRequest.getHeader().setQr((byte) 0);
-            byte[] reqBuffer = resolverRequest.getMessage();
-            assert resolver != null;
-            final DatagramPacket resolverReqPacket = new DatagramPacket(reqBuffer, reqBuffer.length, resolver);
-            serverSocket.send(resolverReqPacket);
+            try {
+                Message resolverRequest = new Message(request.getHeader(),
+                        List.of(request.getQuestions().get(i)),
+                        new ArrayList<>());
+                resolverRequest.getHeader().setQr((byte) 0);
+                byte[] reqBuffer = resolverRequest.getMessage();
 
-            byte[] respBuffer = new byte[BUFFER_SIZE];
-            final DatagramPacket resolverRespPacket = new DatagramPacket(respBuffer, respBuffer.length);
-            serverSocket.receive(resolverRespPacket);
-            Message resolverResponse = new Parser().parse(resolverRespPacket);
-            if (!resolverResponse.getQuestions().isEmpty())
-                answers.add(resolverResponse.getAnswers().getFirst());
+                final DatagramPacket resolverReqPacket = new DatagramPacket(reqBuffer, reqBuffer.length, resolver);
+                serverSocket.send(resolverReqPacket);
+
+                byte[] respBuffer = new byte[BUFFER_SIZE];
+                final DatagramPacket resolverRespPacket = new DatagramPacket(respBuffer, respBuffer.length);
+                serverSocket.receive(resolverRespPacket);
+
+                Message resolverResponse = new Parser().parse(resolverRespPacket);
+                if (!resolverResponse.getQuestions().isEmpty()) {
+                    answers.add(resolverResponse.getAnswers().getFirst());
+                }
+            } catch (IOException e) {
+                log.log(Level.SEVERE, "Error processing DNS request for question {0} : {1}", new Object[]{i, e.getMessage()});
+            }
         }
         return answers;
     }
