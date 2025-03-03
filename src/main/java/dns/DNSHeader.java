@@ -1,3 +1,5 @@
+package dns;
+
 import java.nio.ByteBuffer;
 
 public class DNSHeader {

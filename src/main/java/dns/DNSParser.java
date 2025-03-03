@@ -1,3 +1,5 @@
+package dns;
+
 import java.net.DatagramPacket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;

@@ -1,3 +1,7 @@
+import dns.DNSAnswer;
+import dns.DNSMessage;
+import dns.DNSParser;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;

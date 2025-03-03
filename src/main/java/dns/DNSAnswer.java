@@ -1,3 +1,5 @@
+package dns;
+
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -13,7 +15,7 @@ public class DNSAnswer {
     private String answer;
     private int length;
 
-    // Constructor to initialize a DNSAnswer object with question, qType, qClass, rdLength, and answer
+    // Constructor to initialize a dns.DNSAnswer object with question, qType, qClass, rdLength, and answer
     public DNSAnswer(String question, short qType, short qClass, short rdLength, String answer) {
         this.question = question;
         this.qType = qType;
