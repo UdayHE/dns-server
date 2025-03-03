@@ -11,32 +11,20 @@ public class DNSParser {
     private final HashMap<Integer, String> domainMap = new HashMap<>();
 
     public DNSMessage parse(DatagramPacket packet) {
-        try {
-            byte[] data = packet.getData();
-            DNSHeader header = parseHeader(data);
-            int qdcount = header.getQdCount();
-            currPos = 12;
-            List<DNSQuestion> questions = new ArrayList<>();
-            List<DNSAnswer> answers = new ArrayList<>();
-
-            for (int i = 0; i < qdcount; i++)
-                questions.add(parseQuestion(data));
-
-            // ANCOUNT should be used to determine the number of answers
-            int ancount = header.getAnCount();
-            for (int i = 0; i < ancount; i++)
-                answers.add(parseAnswer(data));
-
-            return new DNSMessage(header, questions, answers);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to parse DNS packet", e);
-        }
+        byte[] data = packet.getData();
+        DNSHeader header = parseHeader(data);
+        int qdcount = header.getQdCount();
+        currPos = 12;
+        List<DNSQuestion> questions = new ArrayList<>();
+        List<DNSAnswer> answers = new ArrayList<>();
+        for (int i = 0; i < qdcount; i++)
+            questions.add(parseQuestion(data));
+        for (int i = 0; i < qdcount; i++)
+            answers.add(parseAnswer(data));
+        return new DNSMessage(header, questions, answers);
     }
 
     private DNSHeader parseHeader(byte[] data) {
-        if (data.length < 12) {
-            throw new IllegalArgumentException("DNS packet data too short to parse header");
-        }
         ByteBuffer buffer = ByteBuffer.wrap(data);
         short ID = buffer.getShort();
         short FLAGS = buffer.getShort();
@@ -50,13 +38,26 @@ public class DNSParser {
     private DNSQuestion parseQuestion(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data);
         buffer.position(currPos);
-        String domainName = parseDomainName(buffer);
+        byte labelLength = buffer.get();
+        StringBuilder labelBuilder = new StringBuilder();
+        while (labelLength > 0) {
+            if ((labelLength&192) == 192) {
+                labelBuilder.append(".");
+                int offset = ((labelLength&63) << 8) | (buffer.get() & 255);
+                labelBuilder.append(domainMap.get(offset));
+                break;
+            }
+            labelBuilder.append(new String(buffer.array(), buffer.position(), labelLength, StandardCharsets.UTF_8));
+            buffer.position(buffer.position() + labelLength);
+            labelLength = buffer.get();
+            if (labelLength > 0) labelBuilder.append(".");
+        }
         short QTYPE = buffer.getShort();
         short QCLASS = buffer.getShort();
 
-        DNSQuestion question = new DNSQuestion(domainName, QTYPE, QCLASS);
+        DNSQuestion question = new DNSQuestion(labelBuilder.toString(), QTYPE, QCLASS);
 
-        domainMap.put(currPos, domainName);
+        domainMap.put(currPos, labelBuilder.toString());
         currPos = buffer.position();
         return question;
     }
@@ -70,11 +71,8 @@ public class DNSParser {
         int TTL = buffer.getInt();
         short RDLENGTH = buffer.getShort();
 
-        if (RDLENGTH < 0 || buffer.remaining() < RDLENGTH) {
-            throw new IllegalArgumentException("Invalid RDLENGTH or insufficient data for RDATA");
-        }
-
         byte[] rdata = new byte[RDLENGTH];
+        int ipPos = buffer.position();
         buffer.get(rdata);
 
         String rdataStr;
@@ -84,6 +82,7 @@ public class DNSParser {
             rdataStr = new String(rdata, StandardCharsets.UTF_8); // Keep this for other record types
         }
 
+
         DNSAnswer answer = new DNSAnswer(domainName, QTYPE, QCLASS, RDLENGTH, rdataStr);
 
         currPos = buffer.position(); // Update position
@@ -91,27 +90,13 @@ public class DNSParser {
     }
 
     private String parseDomainName(ByteBuffer buffer) {
+        int labelLength = buffer.get();
         StringBuilder labelBuilder = new StringBuilder();
-        while (true) {
-            byte labelLength = buffer.get();
-            if (labelLength == 0) {
-                break;
-            } else if ((labelLength & 0xC0) == 0xC0) { // Check for pointer using bitwise AND
-                int offset = ((labelLength & 0x3F) << 8) | (buffer.get() & 0xFF);
-                String cachedDomain = domainMap.get(offset);
-                if (cachedDomain == null) {
-                    throw new IllegalArgumentException("Pointer offset does not exist in domainMap");
-                }
-                labelBuilder.append(cachedDomain);
-                break;
-            } else {
-                if (labelBuilder.length() > 0) {
-                    labelBuilder.append(".");
-                }
-                byte[] label = new byte[labelLength];
-                buffer.get(label);
-                labelBuilder.append(new String(label, StandardCharsets.UTF_8));
-            }
+        while (labelLength > 0) {
+            labelBuilder.append(new String(buffer.array(), buffer.position(), labelLength, StandardCharsets.UTF_8));
+            buffer.position(buffer.position() + labelLength);
+            labelLength = buffer.get();
+            if (labelLength > 0) labelBuilder.append(".");
         }
         return labelBuilder.toString();
     }
