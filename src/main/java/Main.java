@@ -27,18 +27,29 @@ public class Main {
         try (DatagramSocket serverSocket = new DatagramSocket(PORT)) {
             while (true) {
                 final byte[] buffer = new byte[BUFFER_SIZE];
-                final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                serverSocket.receive(packet);
+                final DatagramPacket packet = receiveFromServerSocket(serverSocket, buffer);
                 Message request = new Parser().parse(packet);
                 List<Answer> answers = getAnswers(request, resolver, serverSocket);
                 Message response = getResponse(request, answers);
                 final byte[] responseBuffer = response.getMessage();
-                final DatagramPacket packetResponse = new DatagramPacket(responseBuffer, responseBuffer.length, packet.getSocketAddress());
-                serverSocket.send(packetResponse);
+
+                sendFromServerSocket(packet.getSocketAddress(), serverSocket, responseBuffer);
             }
         } catch (IOException e) {
             log.log(Level.SEVERE, "Exception in Main: {0}", e.getMessage());
         }
+    }
+
+    private static void sendFromServerSocket(SocketAddress resolver, DatagramSocket serverSocket, byte[] requestBuffer) throws IOException {
+        final DatagramPacket resolverReqPacket = new DatagramPacket(requestBuffer, requestBuffer.length, resolver);
+        serverSocket.send(resolverReqPacket);
+    }
+
+
+    private static DatagramPacket receiveFromServerSocket(DatagramSocket serverSocket, byte[] respBuffer) throws IOException {
+        final DatagramPacket resolverRespPacket = new DatagramPacket(respBuffer, respBuffer.length);
+        serverSocket.receive(resolverRespPacket);
+        return resolverRespPacket;
     }
 
     private static Message getResponse(Message request, List<Answer> answers) {
@@ -60,14 +71,12 @@ public class Main {
                         List.of(request.getQuestions().get(i)),
                         new ArrayList<>());
                 resolverRequest.getHeader().setQr((byte) 0);
-                byte[] reqBuffer = resolverRequest.getMessage();
+                byte[] requestBuffer = resolverRequest.getMessage();
 
-                final DatagramPacket resolverReqPacket = new DatagramPacket(reqBuffer, reqBuffer.length, resolver);
-                serverSocket.send(resolverReqPacket);
+                sendFromServerSocket(resolver, serverSocket, requestBuffer);
 
                 byte[] respBuffer = new byte[BUFFER_SIZE];
-                final DatagramPacket resolverRespPacket = new DatagramPacket(respBuffer, respBuffer.length);
-                serverSocket.receive(resolverRespPacket);
+                final DatagramPacket resolverRespPacket = receiveFromServerSocket(serverSocket, respBuffer);
 
                 Message resolverResponse = new Parser().parse(resolverRespPacket);
                 if (!resolverResponse.getQuestions().isEmpty()) {
