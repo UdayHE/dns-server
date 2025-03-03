@@ -8,14 +8,14 @@ public class DNSMessage {
     private List<DNSAnswer> answers;
 
     public DNSMessage(DNSHeader header, List<DNSQuestion> questions, List<DNSAnswer> answers) {
-        this.header = new DNSHeader(header.getID(), header.getFlags(), header.getQDCOUNT(), header.getANCOUNT(),
-                header.getNSCOUNT(), header.getARCOUNT());
+        this.header = new DNSHeader(header.getId(), header.getFlags(), header.getQdCount(), header.getAnCount(),
+                header.getNsCount(), header.getArCount());
         this.questions = new ArrayList<>(questions);
         this.answers = new ArrayList<>(answers);
     }
 
     public int getQuestionCount() {
-        return header.getQDCOUNT();
+        return header.getQdCount();
     }
 
     public DNSHeader getHeader() {
