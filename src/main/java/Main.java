@@ -18,11 +18,12 @@ public class Main {
         }
 
         try (DatagramSocket serverSocket = new DatagramSocket(DNS_PORT)) {
-            System.out.println("DNS server listening on port " + DNS_PORT); // Add a log message
+            System.out.println("DNS server listening on port " + DNS_PORT);
             while (true) {
                 byte[] buffer = new byte[BUFFER_SIZE];
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 serverSocket.receive(packet);
+
                 byte[] response;
                 if (resolverAddress != null) {
                     response = forwardDnsQuery(buffer, resolverAddress);
@@ -54,7 +55,7 @@ public class Main {
         int rd = (flags >> 8) & 0x1;
         int ra = 0;
         int z = 0;
-        int rcode = 0; // No error or Not implemented
+        int rcode = 0; // No error
         int responseFlags = (qr << 15) | (opcode << 11) | (aa << 10) | (tc << 9) | (rd << 8) | (ra << 7) | (z << 4) | rcode;
         responseBuffer.putShort((short) responseFlags);
 
@@ -73,9 +74,8 @@ public class Main {
         // Parse and copy the question section
         List<byte[]> questionNames = new ArrayList<>(); // Store only the name part
         for (int i = 0; i < qdcount; i++) {
-            byte[] questionName = parseQuestionName(requestBuffer);
+            byte[] questionName = parseDomainName(requestBuffer, request);
             questionNames.add(questionName);
-            // Copy the complete question (name, type, class) to the response
             responseBuffer.put(questionName);
             responseBuffer.putShort(requestBuffer.getShort()); // QType
             responseBuffer.putShort(requestBuffer.getShort()); // QClass
@@ -83,10 +83,7 @@ public class Main {
 
         // Add answer section for each question
         for (byte[] questionName : questionNames) {
-            // Name (copy from question)
-            for (byte b : questionName) {
-                responseBuffer.put(b);
-            }
+            responseBuffer.put(questionName);
             responseBuffer.putShort((short) 1); // Type A
             responseBuffer.putShort((short) 1); // Class IN
             responseBuffer.putInt(60);          // TTL
@@ -100,32 +97,47 @@ public class Main {
         return response;
     }
 
-    private static byte[] parseQuestionName(ByteBuffer buffer) {
-        List<Byte> questionBytes = new ArrayList<>();
+    private static byte[] parseDomainName(ByteBuffer buffer, byte[] request) {
+        List<Byte> domainNameBytes = new ArrayList<>();
         int startPosition = buffer.position();
 
         while (true) {
             byte length = buffer.get();
-            questionBytes.add(length);
+            domainNameBytes.add(length);
             if ((length & 0xC0) == 0xC0) { // Compressed label
-                byte nextByte = buffer.get();
-                questionBytes.add(nextByte);
-                break; // Compression pointer, end of name
+                int pointerOffset = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
+                domainNameBytes.addAll(parseCompressedName(request, pointerOffset));
+                break;
             } else if (length == 0) { // End of label sequence
                 break;
             } else { // Uncompressed label
                 for (int i = 0; i < length; i++) {
-                    questionBytes.add(buffer.get());
+                    domainNameBytes.add(buffer.get());
                 }
             }
         }
 
-        byte[] name = new byte[questionBytes.size()];
-        for (int i = 0; i < questionBytes.size(); i++) {
-            name[i] = questionBytes.get(i);
+        byte[] name = new byte[domainNameBytes.size()];
+        for (int i = 0; i < domainNameBytes.size(); i++) {
+            name[i] = domainNameBytes.get(i);
         }
 
         return name;
+    }
+
+    private static List<Byte> parseCompressedName(byte[] request, int offset) {
+        List<Byte> domainNameBytes = new ArrayList<>();
+        while (true) {
+            byte length = request[offset++];
+            domainNameBytes.add(length);
+            if (length == 0) {
+                break;
+            }
+            for (int i = 0; i < length; i++) {
+                domainNameBytes.add(request[offset++]);
+            }
+        }
+        return domainNameBytes;
     }
 
     private static byte[] forwardDnsQuery(byte[] request, String resolverAddress) throws IOException {
