@@ -29,8 +29,8 @@ public class Main {
                 final DatagramPacket packet = new DatagramPacket(buf, buf.length);
                 serverSocket.receive(packet);
 
-                Parser parser = new Parser();
-                DNSMessage request = parser.parse(packet);
+                DNSParser DNSParser = new DNSParser();
+                DNSMessage request = DNSParser.parse(packet);
 
                 List<DNSAnswer> answers = new ArrayList<>();
                 for (int i = 0; i < request.getQuestionCount(); i++) {
@@ -46,8 +46,8 @@ public class Main {
                     byte[] respBuffer = new byte[512];
                     final DatagramPacket resolverRespPacket = new DatagramPacket(respBuffer, respBuffer.length);
                     serverSocket.receive(resolverRespPacket);
-                    Parser parser1 = new Parser();
-                    DNSMessage resolverResponse = parser1.parse(resolverRespPacket);
+                    DNSParser DNSParser1 = new DNSParser();
+                    DNSMessage resolverResponse = DNSParser1.parse(resolverRespPacket);
                     if (!resolverResponse.getQuestions().isEmpty())
                         answers.add(resolverResponse.getAnswers().getFirst());
                 }

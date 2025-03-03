@@ -3,9 +3,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DNSMessage {
-    private DNSHeader header;
-    private List<DNSQuestion> questions;
-    private List<DNSAnswer> answers;
+    private final DNSHeader header;
+    private final List<DNSQuestion> questions;
+    private final List<DNSAnswer> answers;
 
     public DNSMessage(DNSHeader header, List<DNSQuestion> questions, List<DNSAnswer> answers) {
         this.header = new DNSHeader(header.getId(), header.getFlags(), header.getQdCount(), header.getAnCount(),
@@ -28,10 +28,6 @@ public class DNSMessage {
 
     public List<DNSAnswer> getAnswers() {
         return answers;
-    }
-
-    public void setAnswers(List<DNSAnswer> answers) {
-        this.answers = answers;
     }
 
     public byte[] getMessage() {

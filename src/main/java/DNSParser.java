@@ -5,7 +5,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public class Parser {
+public class DNSParser {
 
     private int currPos = 0;
     private final HashMap<Integer, String> domainMap = new HashMap<>();
