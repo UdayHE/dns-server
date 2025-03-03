@@ -3,6 +3,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class DNSMessage {
+
     private final DNSHeader header;
     private final List<DNSQuestion> questions;
     private final List<DNSAnswer> answers;
