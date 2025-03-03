@@ -15,6 +15,9 @@ public class DNSAnswer {
     private String answer;
     private int length;
 
+    private static final int BUFFER_SIZE = 512;
+    private static final String SEPARATOR = "\\.";
+
     // Constructor to initialize a dns.DNSAnswer object with question, qType, qClass, rdLength, and answer
     public DNSAnswer(String question, short qType, short qClass, short rdLength, String answer) {
         this.question = question;
@@ -27,7 +30,7 @@ public class DNSAnswer {
 
     // Method to get the byte array representation of the DNS answer
     public byte[] getAnswer() {
-        ByteBuffer buffer = ByteBuffer.allocate(512);
+        ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE);
         buffer.put(encodeDomainName(question));
         buffer.putShort(qType);
         buffer.putShort(qClass);
@@ -52,7 +55,7 @@ public class DNSAnswer {
     private byte[] encodeIpAddress(String s) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         if (s.length() == 0) return out.toByteArray();
-        for (String octet : s.split("\\.")) {
+        for (String octet : s.split(SEPARATOR)) {
             out.write(Integer.parseInt(octet));
         }
         return out.toByteArray();
@@ -61,7 +64,7 @@ public class DNSAnswer {
     // Private method to encode a domain name into a byte array
     private byte[] encodeDomainName(String s) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        for (String label : s.split("\\.")) {
+        for (String label : s.split(SEPARATOR)) {
             int len = label.length();
             out.write(len);
             out.writeBytes(label.getBytes());

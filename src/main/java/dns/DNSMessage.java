@@ -10,6 +10,9 @@ public class DNSMessage {
     private final List<DNSQuestion> questions;
     private final List<DNSAnswer> answers;
 
+    private static final String SEPARATOR = " - ";
+    private static final int BUFFER_SIZE = 512;
+
     public DNSMessage(DNSHeader header, List<DNSQuestion> questions, List<DNSAnswer> answers) {
         this.header = new DNSHeader(header.getId(), header.getFlags(), header.getQdCount(), header.getAnCount(),
                 header.getNsCount(), header.getArCount());
@@ -34,7 +37,7 @@ public class DNSMessage {
     }
 
     public byte[] getMessage() {
-        ByteBuffer buffer = ByteBuffer.allocate(512)
+        ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE)
                 .put(header.getHeader());
         for (DNSQuestion question : questions)
             buffer.put(question.getQuestion());
@@ -44,7 +47,7 @@ public class DNSMessage {
     }
 
     public String toString() {
-        return header + " - " + questions + " - " + answers;
+        return header + SEPARATOR + questions + SEPARATOR + answers;
     }
 
 }
