@@ -19,7 +19,6 @@ public class Main {
     }
 
     public static void main(String[] args){
-        // You can use print statements as follows for debugging, they'll be visible when running tests.
         System.out.println("Logs from your program will appear here!");
 
         SocketAddress resolver = getResolver(args);
@@ -32,8 +31,6 @@ public class Main {
 
                 Parser parser = new Parser();
                 DNSMessage request = parser.parse(packet);
-
-                // Extract questions and send individual questions to resolver
 
                 List<DNSAnswer> answers = new ArrayList<>();
                 for (int i = 0; i < request.getQuestionCount(); i++) {
@@ -55,7 +52,6 @@ public class Main {
                         answers.add(resolverResponse.getAnswers().getFirst());
                 }
 
-                // Get individual answers from resolver and combine into single answer
                 DNSMessage response = new DNSMessage(request.getHeader(), request.getQuestions(), answers);
                 response.getHeader().setQR((byte) 1);
                 response.getHeader().setANCOUNT((short) response.getQuestions().size());
@@ -65,7 +61,7 @@ public class Main {
                 serverSocket.send(packetResponse);
             }
         } catch (IOException e) {
-            System.out.println("IOException: " + e.getMessage());
+            System.out.println("Exception: " + e.getMessage());
         }
     }
 }

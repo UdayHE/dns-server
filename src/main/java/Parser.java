@@ -8,7 +8,8 @@ import java.util.List;
 public class Parser {
 
     private int currPos = 0;
-    private HashMap<Integer, String> domainMap = new HashMap<>();
+    private final HashMap<Integer, String> domainMap = new HashMap<>();
+
     public DNSMessage parse(DatagramPacket packet) {
         byte[] data = packet.getData();
         DNSHeader header = parseHeader(data);

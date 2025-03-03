@@ -3,32 +3,28 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class DNSQuestion {
-    private short QTYPE;
-    private short QCLASS;
+    private final short qType;
+    private final short qClass;
     private int length;
-    private String question;
+    private final String question;
 
-    public DNSQuestion(String question, short QTYPE, short QCLASS) {
+    public DNSQuestion(String question, short qType, short qClass) {
         this.question = question;
-        this.QTYPE = QTYPE;
-        this.QCLASS = QCLASS;
+        this.qType = qType;
+        this.qClass = qClass;
     }
 
     public byte[] getQuestion() {
         ByteBuffer buffer = ByteBuffer.allocate(512);
         buffer.put(encodeDomainName(question));
-        buffer.putShort(QTYPE);
-        buffer.putShort(QCLASS);
+        buffer.putShort(qType);
+        buffer.putShort(qClass);
         this.length = buffer.position();
         return Arrays.copyOf(buffer.array(), buffer.position());
     }
 
-    public int getQuestionLength() {
-        return this.length;
-    }
-
     public String toString() {
-        return "Question : " + question + ", " + QTYPE + ", " + QCLASS;
+        return "Question : " + question + ", " + qType + ", " + qClass;
     }
 
     private byte[] encodeDomainName(String s) {
