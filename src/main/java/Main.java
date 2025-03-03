@@ -37,7 +37,7 @@ public class Main {
                     DNSMessage resolverRequest = new DNSMessage(request.getHeader(),
                             List.of(request.getQuestions().get(i)),
                             new ArrayList<>());
-                    resolverRequest.getHeader().setQR((byte) 0);
+                    resolverRequest.getHeader().setQr((byte) 0);
                     byte[] reqBuffer = resolverRequest.getMessage();
                     assert resolver != null;
                     final DatagramPacket resolverReqPacket = new DatagramPacket(reqBuffer, reqBuffer.length, resolver);
@@ -53,8 +53,8 @@ public class Main {
                 }
 
                 DNSMessage response = new DNSMessage(request.getHeader(), request.getQuestions(), answers);
-                response.getHeader().setQR((byte) 1);
-                response.getHeader().setANCOUNT((short) response.getQuestions().size());
+                response.getHeader().setQr((byte) 1);
+                response.getHeader().setAnCount((short) response.getQuestions().size());
 
                 final byte[] bufResponse = response.getMessage();
                 final DatagramPacket packetResponse = new DatagramPacket(bufResponse, bufResponse.length, packet.getSocketAddress());

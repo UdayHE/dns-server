@@ -13,7 +13,7 @@ public class Parser {
     public DNSMessage parse(DatagramPacket packet) {
         byte[] data = packet.getData();
         DNSHeader header = parseHeader(data);
-        int qdcount = header.getQDCOUNT();
+        int qdcount = header.getQdCount();
         currPos = 12;
         List<DNSQuestion> questions = new ArrayList<>();
         List<DNSAnswer> answers = new ArrayList<>();
