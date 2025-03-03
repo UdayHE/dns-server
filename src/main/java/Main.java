@@ -26,10 +26,13 @@ public class Main {
 
                 // Extract OPCODE from flags
                 int opcode = (question.flags >> 11) & 0xF; // Extract bits 11-14
+                // Extract RD flag
+                boolean recursionDesired = (question.flags & 0x0100) != 0;
 
                 if (opcode != 0) { // If OPCODE is not `0` (Standard Query)
-                    question.setErrorResponse(4); // Set `RCODE = 4` (Not Implemented)
+                    question.setErrorResponse(4, recursionDesired); // Set `RCODE = 4` (Not Implemented)
                 } else {
+
                     for (String qd : question.qd) {
                         DNSMessage forward = question.clone();
                         forward.qd = new ArrayList<>();
@@ -51,8 +54,7 @@ public class Main {
                     }
 
                     // Set response flags
-                    int flags = question.flags & 0b0110111111111111; // Clear QR and RA bits
-                    flags |= 0b1000000000000000; // Set QR (Response)
+                    int flags = question.flags | 0x8000; // Set QR (Response)
                     question.flags = (short) flags;
                 }
 
@@ -103,8 +105,8 @@ class DNSMessage {
         }
     }
 
-    public void setErrorResponse(int rcode) {
-        flags = (short) ((1 << 15) | (rcode & 0xF)); // Set QR = 1 and RCODE
+    public void setErrorResponse(int rcode, boolean recursionDesired) {
+        flags = (short) (0x8000 | (recursionDesired ? 0x0100 : 0) | (rcode & 0xF)); // Set QR = 1, RD and RCODE
         qd.clear(); // No questions in response
         an.clear(); // No answers
     }
