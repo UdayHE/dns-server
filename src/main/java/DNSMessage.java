@@ -1,16 +1,14 @@
-import java.io.ByteArrayOutputStream;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DnsMessage {
-    private DnsHeader header;
-    private List<DnsQuestion> questions;
-    private List<DnsAnswer> answers;
+public class DNSMessage {
+    private DNSHeader header;
+    private List<DNSQuestion> questions;
+    private List<DNSAnswer> answers;
 
-    public DnsMessage(DnsHeader header, List<DnsQuestion> questions, List<DnsAnswer> answers) {
-        this.header = new DnsHeader(header.getID(), header.getFlags(), header.getQDCOUNT(), header.getANCOUNT(),
+    public DNSMessage(DNSHeader header, List<DNSQuestion> questions, List<DNSAnswer> answers) {
+        this.header = new DNSHeader(header.getID(), header.getFlags(), header.getQDCOUNT(), header.getANCOUNT(),
                 header.getNSCOUNT(), header.getARCOUNT());
         this.questions = new ArrayList<>(questions);
         this.answers = new ArrayList<>(answers);
@@ -20,28 +18,28 @@ public class DnsMessage {
         return header.getQDCOUNT();
     }
 
-    public DnsHeader getHeader() {
+    public DNSHeader getHeader() {
         return header;
     }
 
-    public List<DnsQuestion> getQuestions() {
+    public List<DNSQuestion> getQuestions() {
         return questions;
     }
 
-    public List<DnsAnswer> getAnswers() {
+    public List<DNSAnswer> getAnswers() {
         return answers;
     }
 
-    public void setAnswers(List<DnsAnswer> answers) {
+    public void setAnswers(List<DNSAnswer> answers) {
         this.answers = answers;
     }
 
     public byte[] getMessage() {
         ByteBuffer buffer = ByteBuffer.allocate(512)
                 .put(header.getHeader());
-        for (DnsQuestion question : questions)
+        for (DNSQuestion question : questions)
             buffer.put(question.getQuestion());
-        for (DnsAnswer answer : answers)
+        for (DNSAnswer answer : answers)
             buffer.put(answer.getAnswer());
         return buffer.array();
     }

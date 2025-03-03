@@ -1,6 +1,6 @@
 import java.nio.ByteBuffer;
 
-public class DnsHeader {
+public class DNSHeader {
     private short ID;
     private byte QR;
     private byte OPCODE;
@@ -37,7 +37,7 @@ public class DnsHeader {
         return flags;
     }
 
-    public DnsHeader(short id, short flags, short qdcount, short ancount, short nscount, short arcount) {
+    public DNSHeader(short id, short flags, short qdcount, short ancount, short nscount, short arcount) {
         this.ID = id;
         this.QDCOUNT = qdcount;
         this.ANCOUNT = ancount;

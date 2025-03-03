@@ -2,7 +2,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-public class DnsAnswer {
+public class DNSAnswer {
     private short QTYPE;
     private short QCLASS;
     private int TTL;
@@ -11,7 +11,7 @@ public class DnsAnswer {
     private String answer;
     private int length;
 
-    public DnsAnswer(String question, short QTYPE, short QCLASS, int TTL, short RDLENGTH, String answer) {
+    public DNSAnswer(String question, short QTYPE, short QCLASS, short RDLENGTH, String answer) {
         this.question = question;
         this.QTYPE = QTYPE;
         this.QCLASS = QCLASS;

@@ -31,13 +31,13 @@ public class Main {
                 serverSocket.receive(packet);
 
                 Parser parser = new Parser();
-                DnsMessage request = parser.parse(packet);
+                DNSMessage request = parser.parse(packet);
 
                 // Extract questions and send individual questions to resolver
 
-                List<DnsAnswer> answers = new ArrayList<>();
+                List<DNSAnswer> answers = new ArrayList<>();
                 for (int i = 0; i < request.getQuestionCount(); i++) {
-                    DnsMessage resolverRequest = new DnsMessage(request.getHeader(),
+                    DNSMessage resolverRequest = new DNSMessage(request.getHeader(),
                             List.of(request.getQuestions().get(i)),
                             new ArrayList<>());
                     resolverRequest.getHeader().setQR((byte) 0);
@@ -50,13 +50,13 @@ public class Main {
                     final DatagramPacket resolverRespPacket = new DatagramPacket(respBuffer, respBuffer.length);
                     serverSocket.receive(resolverRespPacket);
                     Parser parser1 = new Parser();
-                    DnsMessage resolverResponse = parser1.parse(resolverRespPacket);
+                    DNSMessage resolverResponse = parser1.parse(resolverRespPacket);
                     if (!resolverResponse.getQuestions().isEmpty())
                         answers.add(resolverResponse.getAnswers().getFirst());
                 }
 
                 // Get individual answers from resolver and combine into single answer
-                DnsMessage response = new DnsMessage(request.getHeader(), request.getQuestions(), answers);
+                DNSMessage response = new DNSMessage(request.getHeader(), request.getQuestions(), answers);
                 response.getHeader().setQR((byte) 1);
                 response.getHeader().setANCOUNT((short) response.getQuestions().size());
 

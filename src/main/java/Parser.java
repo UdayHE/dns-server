@@ -6,23 +6,24 @@ import java.util.HashMap;
 import java.util.List;
 
 public class Parser {
+
     private int currPos = 0;
     private HashMap<Integer, String> domainMap = new HashMap<>();
-    public DnsMessage parse(DatagramPacket packet) {
+    public DNSMessage parse(DatagramPacket packet) {
         byte[] data = packet.getData();
-        DnsHeader header = parseHeader(data);
+        DNSHeader header = parseHeader(data);
         int qdcount = header.getQDCOUNT();
         currPos = 12;
-        List<DnsQuestion> questions = new ArrayList<>();
-        List<DnsAnswer> answers = new ArrayList<>();
+        List<DNSQuestion> questions = new ArrayList<>();
+        List<DNSAnswer> answers = new ArrayList<>();
         for (int i = 0; i < qdcount; i++)
             questions.add(parseQuestion(data));
         for (int i = 0; i < qdcount; i++)
             answers.add(parseAnswer(data));
-        return new DnsMessage(header, questions, answers);
+        return new DNSMessage(header, questions, answers);
     }
 
-    private DnsHeader parseHeader(byte[] data) {
+    private DNSHeader parseHeader(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data);
         short ID = buffer.getShort();
         short FLAGS = buffer.getShort();
@@ -30,10 +31,10 @@ public class Parser {
         short ANCOUNT = buffer.getShort();
         short NSCOUNT = buffer.getShort();
         short ARCOUNT = buffer.getShort();
-        return new DnsHeader(ID, FLAGS, QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT);
+        return new DNSHeader(ID, FLAGS, QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT);
     }
 
-    private DnsQuestion parseQuestion(byte[] data) {
+    private DNSQuestion parseQuestion(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data);
         buffer.position(currPos);
         byte labelLength = buffer.get();
@@ -53,14 +54,14 @@ public class Parser {
         short QTYPE = buffer.getShort();
         short QCLASS = buffer.getShort();
 
-        DnsQuestion question = new DnsQuestion(labelBuilder.toString(), QTYPE, QCLASS);
+        DNSQuestion question = new DNSQuestion(labelBuilder.toString(), QTYPE, QCLASS);
 
         domainMap.put(currPos, labelBuilder.toString());
         currPos = buffer.position();
         return question;
     }
 
-    private DnsAnswer parseAnswer(byte[] data) {
+    private DNSAnswer parseAnswer(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data);
         buffer.position(currPos);
         String domainName = parseDomainName(buffer);
@@ -81,7 +82,7 @@ public class Parser {
         }
 
 
-        DnsAnswer answer = new DnsAnswer(domainName, QTYPE, QCLASS, TTL, RDLENGTH, rdataStr);
+        DNSAnswer answer = new DNSAnswer(domainName, QTYPE, QCLASS, RDLENGTH, rdataStr);
 
         currPos = buffer.position(); // Update position
         return answer;
@@ -99,7 +100,3 @@ public class Parser {
         return labelBuilder.toString();
     }
 }
-
-
-// 00110011.00110001.00110001.00110011
-// 00011111.00001101.01000001.00100100
