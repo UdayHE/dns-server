@@ -3,8 +3,10 @@ package dns;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 public class DNSQuestion {
+
     private final short qType;
     private final short qClass;
     private final String question;
@@ -39,7 +41,7 @@ public class DNSQuestion {
                     throw new IllegalArgumentException("Label in domain name cannot be more than 63 characters");
                 }
                 out.write((byte) len);
-                out.write(label.getBytes("UTF-8")); // Avoid platform dependency
+                out.write(label.getBytes(StandardCharsets.UTF_8)); // Avoid platform dependency
             }
             out.write(0); // End of domain name
             return out.toByteArray();

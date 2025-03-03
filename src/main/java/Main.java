@@ -61,7 +61,7 @@ public class Main {
                 serverSocket.send(packetResponse);
             }
         } catch (IOException e) {
-            System.out.println("Exception in Main: " + e.getMessage());
+            log.log(Level.SEVERE, "Exception in Main: {0}", e.getMessage());
         }
     }
 
