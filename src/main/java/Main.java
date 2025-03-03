@@ -2,8 +2,6 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -72,14 +70,17 @@ public class Main {
         int arcount = 0;
         responseBuffer.putShort((short) arcount);
 
-        // Question section
-        byte[] question = new byte[requestBuffer.remaining()];
-        requestBuffer.get(question);
-        responseBuffer.put(question);
-
-        // Answer section
+        // Parse and copy the question section
+        List<byte[]> questions = new ArrayList<>();
         for (int i = 0; i < qdcount; i++) {
-            responseBuffer.put(question); // Name
+            byte[] question = parseQuestion(requestBuffer);
+            questions.add(question);
+            responseBuffer.put(question);
+        }
+
+        // Add answer section for each question
+        for (byte[] question : questions) {
+            responseBuffer.put(question); // Name (uncompressed)
             responseBuffer.putShort((short) 1); // Type A
             responseBuffer.putShort((short) 1); // Class IN
             responseBuffer.putInt(60); // TTL
@@ -91,6 +92,31 @@ public class Main {
         responseBuffer.flip();
         responseBuffer.get(response);
         return response;
+    }
+
+    private static byte[] parseQuestion(ByteBuffer buffer) {
+        List<Byte> questionBytes = new ArrayList<>();
+        while (true) {
+            byte length = buffer.get();
+            if (length == 0) {
+                questionBytes.add(length);
+                break;
+            }
+            questionBytes.add(length);
+            for (int i = 0; i < length; i++) {
+                questionBytes.add(buffer.get());
+            }
+        }
+        questionBytes.add(buffer.get()); // Type
+        questionBytes.add(buffer.get());
+        questionBytes.add(buffer.get()); // Class
+        questionBytes.add(buffer.get());
+
+        byte[] question = new byte[questionBytes.size()];
+        for (int i = 0; i < questionBytes.size(); i++) {
+            question[i] = questionBytes.get(i);
+        }
+        return question;
     }
 
     private static byte[] forwardDnsQuery(byte[] request, String resolverAddress) throws IOException {
