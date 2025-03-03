@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 
 public class Header {
 
-    private short id;
+    private final short id;
     private byte qr;
     private byte opcode;
     private boolean aa;
@@ -12,11 +12,11 @@ public class Header {
     private boolean rd;
     private boolean ra;
     private byte rcode;
-    private short flags;
-    private short qdCount;
+    private final short flags;
+    private final short qdCount;
     private short anCount;
-    private short nsCount;
-    private short arCount;
+    private final short nsCount;
+    private final short arCount;
 
     private static final int BUFFER_SIZE = 12;
 
