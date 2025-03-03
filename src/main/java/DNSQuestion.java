@@ -1,7 +1,6 @@
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 
 public class DNSQuestion {
     private final short qType;
@@ -23,28 +22,27 @@ public class DNSQuestion {
         buffer.put(encodedDomainName);
         buffer.putShort(qType);
         buffer.putShort(qClass);
-        return Arrays.copyOf(buffer.array(), buffer.position());
+        return buffer.array(); // No need for Arrays.copyOf as buffer.array() returns the full array
     }
 
     public String toString() {
-        return "Question : " + question + ", Type: " + qType + ", Class: " + qClass;
+        return "Question: " + question + ", Type: " + qType + ", Class: " + qClass;
     }
 
     private byte[] encodeDomainName(String s) {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        for (String label : s.split("\\.")) {
-            int len = label.length();
-            if (len > 63) {
-                throw new IllegalArgumentException("Label in domain name cannot be more than 63 characters");
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            for (String label : s.split("\\.")) {
+                int len = label.length();
+                if (len > 63) {
+                    throw new IllegalArgumentException("Label in domain name cannot be more than 63 characters");
+                }
+                out.write((byte) len);
+                out.write(label.getBytes("UTF-8")); // Avoid platform dependency
             }
-            out.write((byte) len);
-            try {
-                out.writeBytes(label.getBytes("UTF-8")); // Specify encoding to avoid platform dependency
-            } catch (IOException e) {
-                throw new RuntimeException("Error encoding domain name", e);
-            }
+            out.write(0); // End of domain name
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException("Error encoding domain name", e);
         }
-        out.write(0);
-        return out.toByteArray();
     }
 }
