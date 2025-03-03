@@ -15,19 +15,20 @@ public class Main {
             return;
         }
 
-        String resolverIP = args[0].split(":")[0];
-        int resolverPort = Integer.parseInt(args[0].split(":")[1]);
+        String resolverAddress = args[0];
+        String resolverIP = resolverAddress.split(":")[0];
+        int resolverPort = Integer.parseInt(resolverAddress.split(":")[1]);
         SocketAddress resolver = new InetSocketAddress(resolverIP, resolverPort);
 
         try (DatagramSocket serverSocket = new DatagramSocket(2053)) {
-            System.out.println("DNS server listening on port 2053"); // Added startup message
+            System.out.println("DNS server listening on port 2053");
 
             while (true) {
                 byte[] buf = new byte[512];
                 DatagramPacket packet = new DatagramPacket(buf, buf.length);
                 serverSocket.receive(packet);
 
-                System.out.println("Received data from: " + packet.getSocketAddress()); // Added client info
+                System.out.println("Received data from: " + packet.getSocketAddress());
 
                 DNSMessage question = new DNSMessage(buf);
 
