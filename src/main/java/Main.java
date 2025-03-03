@@ -9,22 +9,29 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Main {
 
+    private static final Logger log = Logger.getLogger(Main.class.getName());
 
-    public static void main(String[] args){
-        System.out.println("Logs from your program will appear here!");
+    private static final int PORT = 2053;
+    private static final int BUFFER_SIZE = 512;
+    private static final String ARGS_SEPARATOR = ":";
+
+
+    public static void main(String[] args) {
+        log.log(Level.INFO, "Logs from your program will appear here!");
 
         SocketAddress resolver = getResolver(args);
-        try(DatagramSocket serverSocket = new DatagramSocket(2053)) {
-            while(true) {
-                final byte[] buf = new byte[512];
-                final DatagramPacket packet = new DatagramPacket(buf, buf.length);
+        try (DatagramSocket serverSocket = new DatagramSocket(PORT)) {
+            while (true) {
+                final byte[] buffer = new byte[BUFFER_SIZE];
+                final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 serverSocket.receive(packet);
 
-                DNSParser DNSParser = new DNSParser();
-                DNSMessage request = DNSParser.parse(packet);
+                DNSMessage request = new DNSParser().parse(packet);
 
                 List<DNSAnswer> answers = new ArrayList<>();
                 for (int i = 0; i < request.getQuestionCount(); i++) {
@@ -37,11 +44,10 @@ public class Main {
                     final DatagramPacket resolverReqPacket = new DatagramPacket(reqBuffer, reqBuffer.length, resolver);
                     serverSocket.send(resolverReqPacket);
 
-                    byte[] respBuffer = new byte[512];
+                    byte[] respBuffer = new byte[BUFFER_SIZE];
                     final DatagramPacket resolverRespPacket = new DatagramPacket(respBuffer, respBuffer.length);
                     serverSocket.receive(resolverRespPacket);
-                    DNSParser DNSParser1 = new DNSParser();
-                    DNSMessage resolverResponse = DNSParser1.parse(resolverRespPacket);
+                    DNSMessage resolverResponse = new DNSParser().parse(resolverRespPacket);
                     if (!resolverResponse.getQuestions().isEmpty())
                         answers.add(resolverResponse.getAnswers().getFirst());
                 }
@@ -55,13 +61,13 @@ public class Main {
                 serverSocket.send(packetResponse);
             }
         } catch (IOException e) {
-            System.out.println("Exception: " + e.getMessage());
+            System.out.println("Exception in Main: " + e.getMessage());
         }
     }
 
     private static SocketAddress getResolver(String[] args) {
         if (args.length > 1) {
-            String[] resolverPair = args[1].split(":");
+            String[] resolverPair = args[1].split(ARGS_SEPARATOR);
             String resolverIp = resolverPair[0];
             int resolverPort = Integer.parseInt(resolverPair[1]);
             return new InetSocketAddress(resolverIp, resolverPort);
