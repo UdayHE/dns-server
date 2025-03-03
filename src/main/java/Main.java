@@ -24,15 +24,15 @@ public class Main {
 
                 DNSMessage question = new DNSMessage(buf);
 
-                // Extract OPCODE from flags
-                int opcode = (question.flags >> 11) & 0xF; // Extract bits 11-14
+                // Extract OPCODE from flags (Bits 11-14)
+                int opcode = (question.flags >> 11) & 0xF;
                 // Extract RD flag
                 boolean recursionDesired = (question.flags & 0x0100) != 0;
 
                 if (opcode != 0) { // If OPCODE is not `0` (Standard Query)
-                    question.setErrorResponse(4, recursionDesired); // Set `RCODE = 4` (Not Implemented)
+                    question.setErrorResponse(4, recursionDesired); // RCODE = 4 (Not Implemented)
                 } else {
-
+                    // Forward query to resolver for each question
                     for (String qd : question.qd) {
                         DNSMessage forward = question.clone();
                         forward.qd = new ArrayList<>();
@@ -53,15 +53,13 @@ public class Main {
                         }
                     }
 
-                    // Set response flags
-                    int flags = question.flags | 0x8000; // Set QR (Response)
-                    question.flags = (short) flags;
+                    // Set response flags (QR = 1)
+                    question.flags = (short) ((question.flags & 0x7FFF) | 0x8000);
                 }
 
                 byte[] buffer = question.array();
                 DatagramPacket sendPacket = new DatagramPacket(buffer, buffer.length, packet.getSocketAddress());
                 serverSocket.send(sendPacket);
-
             }
         } catch (IOException e) {
             System.out.println("IOException: " + e.getMessage());
@@ -84,8 +82,8 @@ class DNSMessage {
         flags = buffer.getShort();
         int qdcount = buffer.getShort();
         int ancount = buffer.getShort();
-        buffer.getShort(); // nscount
-        buffer.getShort(); // arcount
+        buffer.getShort(); // NSCOUNT
+        buffer.getShort(); // ARCOUNT
 
         for (int i = 0; i < qdcount; i++) {
             qd.add(decodeDomainName(buffer, array));
@@ -97,7 +95,7 @@ class DNSMessage {
             String domain = decodeDomainName(buffer, array);
             buffer.getShort(); // Type = A
             buffer.getShort(); // Class = IN
-            buffer.getInt(); // TTL
+            buffer.getInt();   // TTL
             buffer.getShort(); // Length
             byte[] ip = new byte[4];
             buffer.get(ip);
@@ -106,7 +104,8 @@ class DNSMessage {
     }
 
     public void setErrorResponse(int rcode, boolean recursionDesired) {
-        flags = (short) (0x8000 | (recursionDesired ? 0x0100 : 0) | (rcode & 0xF)); // Set QR = 1, RD and RCODE
+        // Set QR = 1, keep RD as received, set RCODE
+        flags = (short) (0x8000 | (recursionDesired ? 0x0100 : 0) | (rcode & 0xF));
         qd.clear(); // No questions in response
         an.clear(); // No answers
     }
