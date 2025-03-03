@@ -4,6 +4,12 @@ import java.net.*;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.net.*;
+import java.nio.ByteBuffer;
+import java.util.*;
+
 public class Main {
     public static void main(String[] args) {
         String resolverIP = args[1].split(":")[0];
@@ -47,6 +53,7 @@ public class Main {
                     // Set response flags
                     char[] requestFlags = String.format("%16s", Integer.toBinaryString(question.flags)).replace(' ', '0').toCharArray();
                     requestFlags[0] = '1';  // QR (Response)
+                    requestFlags[8] = '0';  // RD (Recursion Desired) → Reset to `0`
                     requestFlags[7] = '1';  // RA (Recursion Available)
                     question.flags = (short) Integer.parseInt(new String(requestFlags), 2);
                 }
