@@ -13,7 +13,7 @@ public class Main {
 
     public static void main(String[] args) {
         String resolverAddress = null;
-        if (args.length > 0 && args[0].equals("--resolver")) {
+        if (args.length > 1 && args[0].equals("--resolver")) {
             resolverAddress = args[1];
         }
 
@@ -43,9 +43,9 @@ public class Main {
         ByteBuffer requestBuffer = ByteBuffer.wrap(request);
         ByteBuffer responseBuffer = ByteBuffer.allocate(BUFFER_SIZE);
 
-        // Header section
+        // Parse Header
         int id = requestBuffer.getShort() & 0xFFFF;
-        responseBuffer.putShort((short) id);
+        responseBuffer.putShort((short) id);  // Copy ID
 
         int flags = requestBuffer.getShort() & 0xFFFF;
         int qr = 1; // Response
@@ -60,9 +60,9 @@ public class Main {
         responseBuffer.putShort((short) responseFlags);
 
         int qdcount = requestBuffer.getShort() & 0xFFFF;
-        responseBuffer.putShort((short) qdcount);
+        responseBuffer.putShort((short) qdcount); // Copy original question count
 
-        int ancount = qdcount; // One answer per question
+        int ancount = qdcount; // Each question gets an answer
         responseBuffer.putShort((short) ancount);
 
         int nscount = 0;
@@ -72,7 +72,7 @@ public class Main {
         responseBuffer.putShort((short) arcount);
 
         // Parse and copy the question section
-        List<byte[]> questionNames = new ArrayList<>(); // Store only the name part
+        List<byte[]> questionNames = new ArrayList<>();
         for (int i = 0; i < qdcount; i++) {
             byte[] questionName = parseDomainName(requestBuffer, request);
             questionNames.add(questionName);
@@ -83,12 +83,12 @@ public class Main {
 
         // Add answer section for each question
         for (byte[] questionName : questionNames) {
-            responseBuffer.put(questionName);
+            responseBuffer.put(questionName);  // Use uncompressed name
             responseBuffer.putShort((short) 1); // Type A
             responseBuffer.putShort((short) 1); // Class IN
             responseBuffer.putInt(60);          // TTL
             responseBuffer.putShort((short) 4); // RDATA length
-            responseBuffer.put(new byte[]{8, 8, 8, 8}); // RDATA (8.8.8.8)
+            responseBuffer.put(new byte[]{8, 8, 8, 8}); // Fake IP (8.8.8.8)
         }
 
         byte[] response = new byte[responseBuffer.position()];
@@ -99,8 +99,6 @@ public class Main {
 
     private static byte[] parseDomainName(ByteBuffer buffer, byte[] request) {
         List<Byte> domainNameBytes = new ArrayList<>();
-        int startPosition = buffer.position();
-
         while (true) {
             byte length = buffer.get();
             domainNameBytes.add(length);
@@ -121,7 +119,6 @@ public class Main {
         for (int i = 0; i < domainNameBytes.size(); i++) {
             name[i] = domainNameBytes.get(i);
         }
-
         return name;
     }
 
