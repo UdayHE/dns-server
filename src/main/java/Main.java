@@ -1,12 +1,9 @@
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.*;
-import java.nio.ByteBuffer;
-import java.util.*;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.net.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.util.*;
 
@@ -51,11 +48,9 @@ public class Main {
                     }
 
                     // Set response flags
-                    char[] requestFlags = String.format("%16s", Integer.toBinaryString(question.flags)).replace(' ', '0').toCharArray();
-                    requestFlags[0] = '1';  // QR (Response)
-                    requestFlags[8] = '0';  // RD (Recursion Desired) → Reset to `0`
-                    requestFlags[7] = '1';  // RA (Recursion Available)
-                    question.flags = (short) Integer.parseInt(new String(requestFlags), 2);
+                    int flags = question.flags & 0b0110111111111111;  // Clear QR and RD bits
+                    flags |= 0b1000000000000000;  // Set QR (Response)
+                    question.flags = (short) flags;
                 }
 
                 byte[] buffer = question.array();
@@ -104,15 +99,7 @@ class DNSMessage {
     }
 
     public void setErrorResponse(int rcode) {
-        int qr = 1;  // Set response flag
-        int opcode = (flags >> 11) & 0xF; // Extract original opcode
-        int aa = 0;
-        int tc = 0;
-        int rd = (flags >> 8) & 0x1;
-        int ra = 0;
-        int z = 0;
-
-        flags = (short) ((qr << 15) | (opcode << 11) | (aa << 10) | (tc << 9) | (rd << 8) | (ra << 7) | (z << 4) | rcode);
+        flags = (short) ((1 << 15) | (rcode & 0xF));  // Set QR = 1 and RCODE
         qd.clear();  // No questions in response
         an.clear();  // No answers
     }
