@@ -30,22 +30,23 @@ public class Main {
                 final byte[] buffer = new byte[BUFFER_SIZE];
                 final DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 serverSocket.receive(packet);
-
                 Message request = new Parser().parse(packet);
-
                 List<Answer> answers = getAnswers(request, resolver, serverSocket);
-
-                Message response = new Message(request.getHeader(), request.getQuestions(), answers);
-                response.getHeader().setQr((byte) 1);
-                response.getHeader().setAnCount((short) response.getQuestions().size());
-
-                final byte[] bufResponse = response.getMessage();
-                final DatagramPacket packetResponse = new DatagramPacket(bufResponse, bufResponse.length, packet.getSocketAddress());
+                Message response = getResponse(request, answers);
+                final byte[] responseBuffer = response.getMessage();
+                final DatagramPacket packetResponse = new DatagramPacket(responseBuffer, responseBuffer.length, packet.getSocketAddress());
                 serverSocket.send(packetResponse);
             }
         } catch (IOException e) {
             log.log(Level.SEVERE, "Exception in Main: {0}", e.getMessage());
         }
+    }
+
+    private static Message getResponse(Message request, List<Answer> answers) {
+        Message response = new Message(request.getHeader(), request.getQuestions(), answers);
+        response.getHeader().setQr((byte) 1);
+        response.getHeader().setAnCount((short) response.getQuestions().size());
+        return response;
     }
 
     private static List<Answer> getAnswers(Message request, SocketAddress resolver, DatagramSocket serverSocket) throws IOException {
