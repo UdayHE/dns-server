@@ -18,11 +18,11 @@ public class Main {
         }
 
         try (DatagramSocket serverSocket = new DatagramSocket(DNS_PORT)) {
+            System.out.println("DNS server listening on port " + DNS_PORT); // Add a log message
             while (true) {
                 byte[] buffer = new byte[BUFFER_SIZE];
                 DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
                 serverSocket.receive(packet);
-
                 byte[] response;
                 if (resolverAddress != null) {
                     response = forwardDnsQuery(buffer, resolverAddress);
@@ -54,7 +54,7 @@ public class Main {
         int rd = (flags >> 8) & 0x1;
         int ra = 0;
         int z = 0;
-        int rcode = opcode == 0 ? 0 : 4; // No error or Not implemented
+        int rcode = 0; // No error or Not implemented
         int responseFlags = (qr << 15) | (opcode << 11) | (aa << 10) | (tc << 9) | (rd << 8) | (ra << 7) | (z << 4) | rcode;
         responseBuffer.putShort((short) responseFlags);
 
@@ -71,19 +71,25 @@ public class Main {
         responseBuffer.putShort((short) arcount);
 
         // Parse and copy the question section
-        List<byte[]> questions = new ArrayList<>();
+        List<byte[]> questionNames = new ArrayList<>(); // Store only the name part
         for (int i = 0; i < qdcount; i++) {
-            byte[] question = parseQuestion(requestBuffer);
-            questions.add(question);
-            responseBuffer.put(question);
+            byte[] questionName = parseQuestionName(requestBuffer);
+            questionNames.add(questionName);
+            // Copy the complete question (name, type, class) to the response
+            responseBuffer.put(questionName);
+            responseBuffer.putShort(requestBuffer.getShort()); // QType
+            responseBuffer.putShort(requestBuffer.getShort()); // QClass
         }
 
         // Add answer section for each question
-        for (byte[] question : questions) {
-            responseBuffer.put(question); // Name (uncompressed)
+        for (byte[] questionName : questionNames) {
+            // Name (copy from question)
+            for (byte b : questionName) {
+                responseBuffer.put(b);
+            }
             responseBuffer.putShort((short) 1); // Type A
             responseBuffer.putShort((short) 1); // Class IN
-            responseBuffer.putInt(60); // TTL
+            responseBuffer.putInt(60);          // TTL
             responseBuffer.putShort((short) 4); // RDATA length
             responseBuffer.put(new byte[]{8, 8, 8, 8}); // RDATA (8.8.8.8)
         }
@@ -94,67 +100,45 @@ public class Main {
         return response;
     }
 
-    private static byte[] parseQuestion(ByteBuffer buffer) {
+    private static byte[] parseQuestionName(ByteBuffer buffer) {
         List<Byte> questionBytes = new ArrayList<>();
+        int startPosition = buffer.position();
+
         while (true) {
             byte length = buffer.get();
+            questionBytes.add(length);
             if ((length & 0xC0) == 0xC0) { // Compressed label
-                int pointer = ((length & 0x3F) << 8) | (buffer.get() & 0xFF);
-                byte[] uncompressed = uncompressLabel(buffer, pointer);
-                questionBytes.addAll(toByteList(uncompressed));
-                break;
+                byte nextByte = buffer.get();
+                questionBytes.add(nextByte);
+                break; // Compression pointer, end of name
             } else if (length == 0) { // End of label sequence
-                questionBytes.add(length);
                 break;
             } else { // Uncompressed label
-                questionBytes.add(length);
                 for (int i = 0; i < length; i++) {
                     questionBytes.add(buffer.get());
                 }
             }
         }
-        questionBytes.add(buffer.get()); // Type
-        questionBytes.add(buffer.get());
-        questionBytes.add(buffer.get()); // Class
-        questionBytes.add(buffer.get());
 
-        byte[] question = new byte[questionBytes.size()];
+        byte[] name = new byte[questionBytes.size()];
         for (int i = 0; i < questionBytes.size(); i++) {
-            question[i] = questionBytes.get(i);
+            name[i] = questionBytes.get(i);
         }
-        return question;
-    }
 
-    private static byte[] uncompressLabel(ByteBuffer buffer, int pointer) {
-        int oldPosition = buffer.position();
-        buffer.position(pointer);
-        byte[] uncompressed = parseQuestion(buffer).clone();
-        buffer.position(oldPosition);
-        return uncompressed;
-    }
-
-    private static List<Byte> toByteList(byte[] array) {
-        List<Byte> list = new ArrayList<>();
-        for (byte b : array) {
-            list.add(b);
-        }
-        return list;
+        return name;
     }
 
     private static byte[] forwardDnsQuery(byte[] request, String resolverAddress) throws IOException {
         String[] parts = resolverAddress.split(":");
         InetAddress resolverIp = InetAddress.getByName(parts[0]);
         int resolverPort = Integer.parseInt(parts[1]);
-
-        DatagramSocket socket = new DatagramSocket();
-        DatagramPacket packet = new DatagramPacket(request, request.length, resolverIp, resolverPort);
-        socket.send(packet);
-
-        byte[] buffer = new byte[BUFFER_SIZE];
-        DatagramPacket responsePacket = new DatagramPacket(buffer, buffer.length);
-        socket.receive(responsePacket);
-
-        socket.close();
-        return responsePacket.getData();
+        try (DatagramSocket socket = new DatagramSocket()) {
+            DatagramPacket packet = new DatagramPacket(request, request.length, resolverIp, resolverPort);
+            socket.send(packet);
+            byte[] buffer = new byte[BUFFER_SIZE];
+            DatagramPacket responsePacket = new DatagramPacket(buffer, buffer.length);
+            socket.receive(responsePacket);
+            return responsePacket.getData();
+        }
     }
 }
