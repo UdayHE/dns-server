@@ -41,13 +41,7 @@ public class Parser {
         ByteBuffer buffer = ByteBuffer.wrap(data);
         buffer.position(currPosition);
         byte labelLength = buffer.get();
-        StringBuilder labelBuilder = new StringBuilder();
-        while (labelLength > 0) {
-            labelBuilder.append(new String(buffer.array(), buffer.position(), labelLength, StandardCharsets.UTF_8));
-            buffer.position(buffer.position() + labelLength);
-            labelLength = buffer.get();
-            if (labelLength > 0) labelBuilder.append(SEPARATOR);
-        }
+        StringBuilder labelBuilder = getLabelBuilder(labelLength, buffer);
         short qType = buffer.getShort();
         short qClass = buffer.getShort();
 
@@ -75,15 +69,6 @@ public class Parser {
         return answer;
     }
 
-    private String getRdataStr(short qType, short rdLength, byte[] rdata) {
-        String rdataStr;
-        if (qType == 1 && rdLength == 4)  // A Record (IPv4)
-            rdataStr = String.format("%d.%d.%d.%d", rdata[0] & 0xFF, rdata[1] & 0xFF, rdata[2] & 0xFF, rdata[3] & 0xFF);
-        else
-            rdataStr = new String(rdata, StandardCharsets.UTF_8); // Keep this for other record types
-        return rdataStr;
-    }
-
     private String parseDomainName(ByteBuffer buffer) {
         int labelLength = buffer.get();
         StringBuilder labelBuilder = new StringBuilder();
@@ -94,5 +79,25 @@ public class Parser {
             if (labelLength > 0) labelBuilder.append(SEPARATOR);
         }
         return labelBuilder.toString();
+    }
+
+    private StringBuilder getLabelBuilder(byte labelLength, ByteBuffer buffer) {
+        StringBuilder labelBuilder = new StringBuilder();
+        while (labelLength > 0) {
+            labelBuilder.append(new String(buffer.array(), buffer.position(), labelLength, StandardCharsets.UTF_8));
+            buffer.position(buffer.position() + labelLength);
+            labelLength = buffer.get();
+            if (labelLength > 0) labelBuilder.append(SEPARATOR);
+        }
+        return labelBuilder;
+    }
+
+    private String getRdataStr(short qType, short rdLength, byte[] rdata) {
+        String rdataStr;
+        if (qType == 1 && rdLength == 4)  // A Record (IPv4)
+            rdataStr = String.format("%d.%d.%d.%d", rdata[0] & 0xFF, rdata[1] & 0xFF, rdata[2] & 0xFF, rdata[3] & 0xFF);
+        else
+            rdataStr = new String(rdata, StandardCharsets.UTF_8); // Keep this for other record types
+        return rdataStr;
     }
 }
