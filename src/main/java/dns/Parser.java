@@ -72,11 +72,11 @@ public class Parser {
         String domainName = parseDomainName(buffer);
         short qType = buffer.getShort();
         short qClass = buffer.getShort();
-        int ttl = buffer.getInt();
+        buffer.getInt();
         short rdLength = buffer.getShort();
 
         byte[] rdata = new byte[rdLength];
-        int ipPos = buffer.position();
+        buffer.position();
         buffer.get(rdata);
 
         String rdataStr;
