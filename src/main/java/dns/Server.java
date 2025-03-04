@@ -26,7 +26,7 @@ public class Server {
     }
 
     public void start(String[] args) {
-        log.log(Level.INFO, "Starting DNS-Server...");
+        log.log(Level.INFO, "DNS-Server Started....");
         SocketAddress resolver = getResolver(args);
         try (DatagramSocket serverSocket = new DatagramSocket(PORT)) {
             while (true) {
@@ -39,7 +39,7 @@ public class Server {
                 sendFromServerSocket(packet.getSocketAddress(), serverSocket, responseBuffer);
             }
         } catch (IOException e) {
-            log.log(Level.SEVERE, "Exception in Server: {0}", e.getMessage());
+            log.log(Level.SEVERE, "Exception in DNS-Server: {0}", e.getMessage());
         }
     }
 
