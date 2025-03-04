@@ -9,6 +9,8 @@ import java.util.List;
 
 public class Parser {
 
+    private static final String SEPARATOR = ".";
+
     private int currPos = 0;
     private final HashMap<Integer, String> domainMap = new HashMap<>();
 
@@ -44,7 +46,7 @@ public class Parser {
         StringBuilder labelBuilder = new StringBuilder();
         while (labelLength > 0) {
             if ((labelLength & 192) == 192) {
-                labelBuilder.append(".");
+                labelBuilder.append(SEPARATOR);
                 int offset = ((labelLength & 63) << 8) | (buffer.get() & 255);
                 labelBuilder.append(domainMap.get(offset));
                 break;
@@ -52,7 +54,7 @@ public class Parser {
             labelBuilder.append(new String(buffer.array(), buffer.position(), labelLength, StandardCharsets.UTF_8));
             buffer.position(buffer.position() + labelLength);
             labelLength = buffer.get();
-            if (labelLength > 0) labelBuilder.append(".");
+            if (labelLength > 0) labelBuilder.append(SEPARATOR);
         }
         short qType = buffer.getShort();
         short qClass = buffer.getShort();
@@ -97,7 +99,7 @@ public class Parser {
             labelBuilder.append(new String(buffer.array(), buffer.position(), labelLength, StandardCharsets.UTF_8));
             buffer.position(buffer.position() + labelLength);
             labelLength = buffer.get();
-            if (labelLength > 0) labelBuilder.append(".");
+            if (labelLength > 0) labelBuilder.append(SEPARATOR);
         }
         return labelBuilder.toString();
     }
