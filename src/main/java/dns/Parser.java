@@ -4,21 +4,19 @@ import java.net.DatagramPacket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 public class Parser {
 
     private static final String SEPARATOR = ".";
 
-    private int currPos = 0;
-   // private final HashMap<Integer, String> domainMap = new HashMap<>();
+    private int currPosition = 0;
 
     public Message parse(DatagramPacket packet) {
         byte[] data = packet.getData();
         Header header = parseHeader(data);
         int qdCount = header.getQdCount();
-        currPos = 12;
+        currPosition = 12;
         List<Question> questions = new ArrayList<>();
         List<Answer> answers = new ArrayList<>();
         for (int i = 0; i < qdCount; i++)
@@ -41,7 +39,7 @@ public class Parser {
 
     private Question parseQuestion(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data);
-        buffer.position(currPos);
+        buffer.position(currPosition);
         byte labelLength = buffer.get();
         StringBuilder labelBuilder = new StringBuilder();
         while (labelLength > 0) {
@@ -55,14 +53,13 @@ public class Parser {
 
         Question question = new Question(labelBuilder.toString(), qType, qClass);
 
-      //  domainMap.put(currPos, labelBuilder.toString());
-        currPos = buffer.position();
+        currPosition = buffer.position();
         return question;
     }
 
     private Answer parseAnswer(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data);
-        buffer.position(currPos);
+        buffer.position(currPosition);
         String domainName = parseDomainName(buffer);
         short qType = buffer.getShort();
         short qClass = buffer.getShort();
@@ -70,7 +67,7 @@ public class Parser {
         short rdLength = buffer.getShort();
 
         byte[] rdata = new byte[rdLength];
-        buffer.position();
+      //  buffer.position();
         buffer.get(rdata);
 
         String rdataStr;
@@ -81,7 +78,7 @@ public class Parser {
 
         Answer answer = new Answer(domainName, qType, qClass, rdLength, rdataStr);
 
-        currPos = buffer.position(); // Update position
+        currPosition = buffer.position(); // Update position
         return answer;
     }
 
