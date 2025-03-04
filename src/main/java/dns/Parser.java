@@ -72,7 +72,7 @@ public class Parser {
         String domainName = parseDomainName(buffer);
         short qType = buffer.getShort();
         short qClass = buffer.getShort();
-        buffer.getInt();
+        buffer.getInt(); //ttl
         short rdLength = buffer.getShort();
 
         byte[] rdata = new byte[rdLength];
