@@ -67,19 +67,21 @@ public class Parser {
         short rdLength = buffer.getShort();
 
         byte[] rdata = new byte[rdLength];
-      //  buffer.position();
         buffer.get(rdata);
 
+        String rdataStr = getRdataStr(qType, rdLength, rdata);
+        Answer answer = new Answer(domainName, qType, qClass, rdLength, rdataStr);
+        currPosition = buffer.position(); // Update position
+        return answer;
+    }
+
+    private String getRdataStr(short qType, short rdLength, byte[] rdata) {
         String rdataStr;
         if (qType == 1 && rdLength == 4)  // A Record (IPv4)
             rdataStr = String.format("%d.%d.%d.%d", rdata[0] & 0xFF, rdata[1] & 0xFF, rdata[2] & 0xFF, rdata[3] & 0xFF);
         else
             rdataStr = new String(rdata, StandardCharsets.UTF_8); // Keep this for other record types
-
-        Answer answer = new Answer(domainName, qType, qClass, rdLength, rdataStr);
-
-        currPosition = buffer.position(); // Update position
-        return answer;
+        return rdataStr;
     }
 
     private String parseDomainName(ByteBuffer buffer) {
