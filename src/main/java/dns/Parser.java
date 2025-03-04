@@ -54,10 +54,10 @@ public class Parser {
             labelLength = buffer.get();
             if (labelLength > 0) labelBuilder.append(".");
         }
-        short QTYPE = buffer.getShort();
-        short QCLASS = buffer.getShort();
+        short qType = buffer.getShort();
+        short qClass = buffer.getShort();
 
-        Question question = new Question(labelBuilder.toString(), QTYPE, QCLASS);
+        Question question = new Question(labelBuilder.toString(), qType, qClass);
 
         domainMap.put(currPos, labelBuilder.toString());
         currPos = buffer.position();
