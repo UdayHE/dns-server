@@ -39,10 +39,6 @@ public class Answer {
         return Arrays.copyOf(buffer.array(), buffer.position());
     }
 
-    // Method to get the length of the DNS answer
-    public int getAnswerLength() {
-        return length;
-    }
 
     // Method to return a string representation of the DNS answer
     public String toString() {
