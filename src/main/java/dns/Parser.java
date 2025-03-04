@@ -28,13 +28,13 @@ public class Parser {
 
     private Header parseHeader(byte[] data) {
         ByteBuffer buffer = ByteBuffer.wrap(data);
-        short ID = buffer.getShort();
-        short FLAGS = buffer.getShort();
-        short QDCOUNT = buffer.getShort();
-        short ANCOUNT = buffer.getShort();
-        short NSCOUNT = buffer.getShort();
-        short ARCOUNT = buffer.getShort();
-        return new Header(ID, FLAGS, QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT);
+        short id = buffer.getShort();
+        short flags = buffer.getShort();
+        short qdCount = buffer.getShort();
+        short anCount = buffer.getShort();
+        short nsCount = buffer.getShort();
+        short arCount = buffer.getShort();
+        return new Header(id, flags, qdCount, anCount, nsCount, arCount);
     }
 
     private Question parseQuestion(byte[] data) {
