@@ -45,12 +45,6 @@ public class Parser {
         byte labelLength = buffer.get();
         StringBuilder labelBuilder = new StringBuilder();
         while (labelLength > 0) {
-            if ((labelLength & 192) == 192) {
-                labelBuilder.append(SEPARATOR);
-                int offset = ((labelLength & 63) << 8) | (buffer.get() & 255);
-                labelBuilder.append(domainMap.get(offset));
-                break;
-            }
             labelBuilder.append(new String(buffer.array(), buffer.position(), labelLength, StandardCharsets.UTF_8));
             buffer.position(buffer.position() + labelLength);
             labelLength = buffer.get();
