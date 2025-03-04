@@ -24,9 +24,8 @@ public class Question {
      * @param qClass the query class
      */
     public Question(String name, short qType, short qClass) {
-        if (name == null || name.isEmpty()) {
+        if (name == null || name.isEmpty())
             throw new IllegalArgumentException("Question cannot be null or empty");
-        }
         this.name = name;
         this.qType = qType;
         this.qClass = qClass;
@@ -65,9 +64,8 @@ public class Question {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             for (String label : s.split(SEPARATOR)) {
                 int len = label.length();
-                if (len > 63) {
+                if (len > 63)
                     throw new IllegalArgumentException("Label in domain name cannot be more than 63 characters");
-                }
                 out.write((byte) len);
                 out.write(label.getBytes(StandardCharsets.UTF_8)); // Avoid platform dependency
             }

@@ -49,10 +49,9 @@ public class Answer {
     // Private method to encode an IP address into a byte array
     private byte[] encodeIpAddress(String s) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        if (s.length() == 0) return out.toByteArray();
-        for (String octet : s.split(SEPARATOR)) {
+        if (s.isEmpty()) return out.toByteArray();
+        for (String octet : s.split(SEPARATOR))
             out.write(Integer.parseInt(octet));
-        }
         return out.toByteArray();
     }
 
