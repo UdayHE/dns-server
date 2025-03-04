@@ -15,13 +15,13 @@ public class Parser {
     public Message parse(DatagramPacket packet) {
         byte[] data = packet.getData();
         Header header = parseHeader(data);
-        int qdcount = header.getQdCount();
+        int qdCount = header.getQdCount();
         currPos = 12;
         List<Question> questions = new ArrayList<>();
         List<Answer> answers = new ArrayList<>();
-        for (int i = 0; i < qdcount; i++)
+        for (int i = 0; i < qdCount; i++)
             questions.add(parseQuestion(data));
-        for (int i = 0; i < qdcount; i++)
+        for (int i = 0; i < qdCount; i++)
             answers.add(parseAnswer(data));
         return new Message(header, questions, answers);
     }
