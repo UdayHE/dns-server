@@ -26,6 +26,7 @@ public class Server {
     }
 
     public void start(String[] args) {
+        log.log(Level.INFO, "Starting DNS-Server...");
         SocketAddress resolver = getResolver(args);
         try (DatagramSocket serverSocket = new DatagramSocket(PORT)) {
             while (true) {
@@ -35,7 +36,6 @@ public class Server {
                 List<Answer> answers = getAnswers(request, resolver, serverSocket);
                 Message response = getResponse(request, answers);
                 final byte[] responseBuffer = response.getMessage();
-
                 sendFromServerSocket(packet.getSocketAddress(), serverSocket, responseBuffer);
             }
         } catch (IOException e) {
