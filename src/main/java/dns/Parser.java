@@ -70,23 +70,22 @@ public class Parser {
         ByteBuffer buffer = ByteBuffer.wrap(data);
         buffer.position(currPos);
         String domainName = parseDomainName(buffer);
-        short QTYPE = buffer.getShort();
-        short QCLASS = buffer.getShort();
-        int TTL = buffer.getInt();
-        short RDLENGTH = buffer.getShort();
+        short qType = buffer.getShort();
+        short qClass = buffer.getShort();
+        int ttl = buffer.getInt();
+        short rdLength = buffer.getShort();
 
-        byte[] rdata = new byte[RDLENGTH];
+        byte[] rdata = new byte[rdLength];
         int ipPos = buffer.position();
         buffer.get(rdata);
 
         String rdataStr;
-        if (QTYPE == 1 && RDLENGTH == 4)  // A Record (IPv4)
+        if (qType == 1 && rdLength == 4)  // A Record (IPv4)
             rdataStr = String.format("%d.%d.%d.%d", rdata[0] & 0xFF, rdata[1] & 0xFF, rdata[2] & 0xFF, rdata[3] & 0xFF);
         else
             rdataStr = new String(rdata, StandardCharsets.UTF_8); // Keep this for other record types
 
-
-        Answer answer = new Answer(domainName, QTYPE, QCLASS, RDLENGTH, rdataStr);
+        Answer answer = new Answer(domainName, qType, qClass, rdLength, rdataStr);
 
         currPos = buffer.position(); // Update position
         return answer;
