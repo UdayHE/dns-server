@@ -19,7 +19,8 @@ public class Server {
     private static final String ARGS_SEPARATOR = ":";
     private static final Server INSTANCE = new Server();
 
-    private Server() {}
+    private Server() {
+    }
 
     public static Server getInstance() {
         return INSTANCE;
@@ -70,20 +71,18 @@ public class Server {
         for (int i = 0; i < request.getQuestionCount(); i++) {
             try {
                 Message resolverRequest = new Message(request.getHeader(),
-                        List.of(request.getQuestions().get(i)),
-                        new ArrayList<>());
+                        List.of(request.getQuestions().get(i)), new ArrayList<>());
                 resolverRequest.getHeader().setQr((byte) 0);
-                byte[] requestBuffer = resolverRequest.getMessage();
 
+                byte[] requestBuffer = resolverRequest.getMessage();
                 sendFromServerSocket(resolver, serverSocket, requestBuffer);
 
                 byte[] respBuffer = new byte[BUFFER_SIZE];
                 final DatagramPacket resolverRespPacket = receiveFromServerSocket(serverSocket, respBuffer);
 
                 Message resolverResponse = new Parser().parse(resolverRespPacket);
-                if (!resolverResponse.getQuestions().isEmpty()) {
+                if (!resolverResponse.getQuestions().isEmpty())
                     answers.add(resolverResponse.getAnswers().getFirst());
-                }
             } catch (IOException e) {
                 log.log(Level.SEVERE, "Error processing DNS request for question {0} : {1}", new Object[]{i, e.getMessage()});
             }
