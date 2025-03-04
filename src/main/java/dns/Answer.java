@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
+// Represents a DNS answer record with the necessary fields and methods to encode the data
 public class Answer {
 
     private static final int BUFFER_SIZE = 512;
@@ -17,6 +18,7 @@ public class Answer {
     private final String answer;
     private int length;
 
+    // Constructor to initialize the fields of the DNS answer record
     public Answer(String question, short qType, short qClass, short rdLength, String answer) {
         this.question = question;
         this.qType = qType;
@@ -38,7 +40,6 @@ public class Answer {
         this.length = buffer.position();
         return Arrays.copyOf(buffer.array(), buffer.position());
     }
-
 
     // Method to return a string representation of the DNS answer
     public String toString() {
