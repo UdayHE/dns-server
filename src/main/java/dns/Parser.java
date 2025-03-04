@@ -12,7 +12,7 @@ public class Parser {
     private static final String SEPARATOR = ".";
 
     private int currPos = 0;
-    private final HashMap<Integer, String> domainMap = new HashMap<>();
+   // private final HashMap<Integer, String> domainMap = new HashMap<>();
 
     public Message parse(DatagramPacket packet) {
         byte[] data = packet.getData();
@@ -55,7 +55,7 @@ public class Parser {
 
         Question question = new Question(labelBuilder.toString(), qType, qClass);
 
-        domainMap.put(currPos, labelBuilder.toString());
+      //  domainMap.put(currPos, labelBuilder.toString());
         currPos = buffer.position();
         return question;
     }
