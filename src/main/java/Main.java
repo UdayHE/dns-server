@@ -7,10 +7,10 @@ public class Main {
 
     private static final Logger log = Logger.getLogger(Main.class.getName());
 
+
     public static void main(String[] args) {
         log.log(Level.INFO, "Starting DNS-Server...");
-        Server server = new Server();
-        server.start(args);
+        Server.getInstance().start(args);
     }
 
 }

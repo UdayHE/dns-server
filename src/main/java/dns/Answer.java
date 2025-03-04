@@ -6,7 +6,9 @@ import java.util.Arrays;
 
 public class Answer {
 
-    // Fields representing the type, class, time-to-live, resource data length, question, answer, and length of the DNS answer
+    private static final int BUFFER_SIZE = 512;
+    private static final String SEPARATOR = "\\.";
+
     private short qType;
     private short qClass;
     private int ttl;
@@ -15,10 +17,6 @@ public class Answer {
     private String answer;
     private int length;
 
-    private static final int BUFFER_SIZE = 512;
-    private static final String SEPARATOR = "\\.";
-
-    // Constructor to initialize a dns.DNSAnswer object with question, qType, qClass, rdLength, and answer
     public Answer(String question, short qType, short qClass, short rdLength, String answer) {
         this.question = question;
         this.qType = qType;

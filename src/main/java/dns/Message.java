@@ -6,12 +6,12 @@ import java.util.List;
 
 public class Message {
 
+    private static final String SEPARATOR = " - ";
+    private static final int BUFFER_SIZE = 512;
+
     private final Header header;
     private final List<Question> questions;
     private final List<Answer> answers;
-
-    private static final String SEPARATOR = " - ";
-    private static final int BUFFER_SIZE = 512;
 
     public Message(Header header, List<Question> questions, List<Answer> answers) {
         this.header = new Header(header.getId(), header.getFlags(), header.getQdCount(), header.getAnCount(),
@@ -40,7 +40,7 @@ public class Message {
         ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE)
                 .put(header.getHeader());
         for (Question question : questions)
-            buffer.put(question.getQuestion());
+            buffer.put(question.getName());
         for (Answer answer : answers)
             buffer.put(answer.getAnswer());
         return buffer.array();

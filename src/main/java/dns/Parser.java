@@ -43,9 +43,9 @@ public class Parser {
         byte labelLength = buffer.get();
         StringBuilder labelBuilder = new StringBuilder();
         while (labelLength > 0) {
-            if ((labelLength&192) == 192) {
+            if ((labelLength & 192) == 192) {
                 labelBuilder.append(".");
-                int offset = ((labelLength&63) << 8) | (buffer.get() & 255);
+                int offset = ((labelLength & 63) << 8) | (buffer.get() & 255);
                 labelBuilder.append(domainMap.get(offset));
                 break;
             }
@@ -78,15 +78,12 @@ public class Parser {
         buffer.get(rdata);
 
         String rdataStr;
-        if (QTYPE == 1 && RDLENGTH == 4) { // A Record (IPv4)
+        if (QTYPE == 1 && RDLENGTH == 4)  // A Record (IPv4)
             rdataStr = String.format("%d.%d.%d.%d", rdata[0] & 0xFF, rdata[1] & 0xFF, rdata[2] & 0xFF, rdata[3] & 0xFF);
-        } else {
+        else
             rdataStr = new String(rdata, StandardCharsets.UTF_8); // Keep this for other record types
-        }
-
 
         Answer answer = new Answer(domainName, QTYPE, QCLASS, RDLENGTH, rdataStr);
-
         currPos = buffer.position(); // Update position
         return answer;
     }

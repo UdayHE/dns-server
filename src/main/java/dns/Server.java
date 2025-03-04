@@ -17,6 +17,13 @@ public class Server {
     private static final int PORT = 2053;
     private static final int BUFFER_SIZE = 512;
     private static final String ARGS_SEPARATOR = ":";
+    private static final Server INSTANCE = new Server();
+
+    private Server() {}
+
+    public static Server getInstance() {
+        return INSTANCE;
+    }
 
     public void start(String[] args) {
         SocketAddress resolver = getResolver(args);
@@ -32,9 +39,8 @@ public class Server {
                 sendFromServerSocket(packet.getSocketAddress(), serverSocket, responseBuffer);
             }
         } catch (IOException e) {
-            log.log(Level.SEVERE, "Exception in Main: {0}", e.getMessage());
+            log.log(Level.SEVERE, "Exception in Server: {0}", e.getMessage());
         }
-
     }
 
     private void sendFromServerSocket(SocketAddress resolver, DatagramSocket serverSocket, byte[] requestBuffer) throws IOException {
