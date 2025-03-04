@@ -9,12 +9,12 @@ public class Answer {
     private static final int BUFFER_SIZE = 512;
     private static final String SEPARATOR = "\\.";
 
-    private short qType;
-    private short qClass;
-    private int ttl;
-    private short rdLength;
-    private String question;
-    private String answer;
+    private final short qType;
+    private final short qClass;
+    private final int ttl;
+    private final short rdLength;
+    private final String question;
+    private final String answer;
     private int length;
 
     public Answer(String question, short qType, short qClass, short rdLength, String answer) {
